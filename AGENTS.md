@@ -2,6 +2,11 @@
 
 This document provides instructions and guidelines for agentic coding agents working on the Trading Assistant repository. Adhering to these patterns ensures consistency and maintainability across the codebase.
 
+## Agent Behavior & Pedagogical Rules
+- **Pedagogical Focus:** Your primary goal is to ensure the user learns as much as possible and gains technical skills. Always provide clear, detailed explanations for your implementation choices, architectural patterns, and tool selections. You are an educator as much as an assistant; focus on the "why" behind every decision.
+- **No Automatic Git Operations:** NEVER perform `git commit`, `git push`, or any other Git operations automatically. You must strictly wait for an explicit user request before executing any Git-related commands. This ensures the user remains in control of the project's history.
+- **Proactive Testing Proposals:** After each feature addition or modification, you must propose a specific testing strategy. You must explain the different types of tests relevant to the change (e.g., Unit Tests for isolated logic, Integration Tests for API endpoints or database interactions) and wait for user confirmation before implementation.
+
 ## Project Overview
 - **Stack:** Java 21, Spring Boot 4.0+, Maven.
 - **Architecture:** Standard Layered Architecture.

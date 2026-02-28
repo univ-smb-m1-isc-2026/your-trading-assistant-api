@@ -12,7 +12,7 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Architecture:** Standard Layered Architecture.
   - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`, `DevDataInitializer`).
   - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`, `FavoriteController`).
-  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `HyperliquidAssetDataProvider`, `FavoriteService`).
+  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `AssetDataProvider` (interface with date-range signature), `HyperliquidAssetDataProvider`, `FavoriteService`).
   - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository`, `AccountFavoriteAssetRepository` — all extend `JpaRepository`).
   - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`, `AccountFavoriteAsset`).
   - `dto`: Data Transfer Objects (`RegisterRequest`, `LoginRequest`, `AuthResponse`, `AssetSummaryResponse`, `CandleResponse`).
@@ -37,7 +37,7 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Generate coverage report:** `./mvnw clean test jacoco:report`
   - Report generated at `target/site/jacoco/index.html`
   - *Note:* JaCoCo 0.8.12 emits `IllegalClassFormatException` warnings when run on Java 24 (class file major version 68). This is noise only — tests still pass and the report is generated correctly. See **Known Issues** below.
-- **Current test count:** 103 tests, all passing.
+- **Current test count:** 149 tests, all passing.
 
 ### Linting and Quality
 - **Check for dependency updates:** `./mvnw versions:display-plugin-updates`
@@ -114,7 +114,7 @@ This document provides instructions and guidelines for agentic coding agents wor
 
 ## Development Environment
 - **Run with dev profile (seeded data):** `./mvnw spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev"`
-  - Seeds 5 assets (BTC, ETH, AERO, SAGA, MANTA) with 31 days of candles fetched from the Hyperliquid API.
+  - Seeds 5 assets (BTC, ETH, AERO, SAGA, MANTA) with **1 year (365 days)** of daily candles fetched from the Hyperliquid API via a single ranged request per asset.
 - **H2 Console:** Available at `/h2-console` when the app is running.
 - **Hot Reload:** `spring-boot-devtools` is included for faster development cycles.
 
@@ -135,7 +135,7 @@ TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
 # 3. List assets (sorted A→Z, with latest price)
 curl -s http://localhost:8080/assets -H "Authorization: Bearer $TOKEN"
 
-# 4. Candles for a known symbol (~31 OHLCV entries)
+# 4. Candles for a known symbol (~365 OHLCV entries)
 curl -s http://localhost:8080/assets/BTC/candles -H "Authorization: Bearer $TOKEN"
 
 # 5. Unknown symbol → 404 with {"error":"Asset not found","symbol":"UNKNOWN","timestamp":"..."}

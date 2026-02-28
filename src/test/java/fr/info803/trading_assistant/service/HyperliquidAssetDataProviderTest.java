@@ -36,7 +36,7 @@ import reactor.core.publisher.Mono;
  * - null response from WebClient → empty list (defensive)
  * - empty list response → empty list returned
  * - HTTP error (exception in block()) → empty list returned (resilience)
- * - startTime / endTime timestamps bracket the target date correctly
+ * - startTime / endTime timestamps bracket the target date range correctly
  */
 @DisplayName("HyperliquidAssetDataProvider Unit Tests")
 class HyperliquidAssetDataProviderTest {
@@ -168,7 +168,7 @@ class HyperliquidAssetDataProviderTest {
                 .thenReturn(Mono.just(List.of()));
 
             // Act
-            provider.fetchDailyValues("BTC", TEST_DATE, API_URL);
+            provider.fetchDailyValues("BTC", TEST_DATE, TEST_DATE, API_URL);
 
             // Assert: we verify that bodyValue() was called (timestamps are embedded in the
             // request body).  The real timestamp values are verified in the integration test.
@@ -201,7 +201,7 @@ class HyperliquidAssetDataProviderTest {
                 .thenReturn(Mono.empty()); // Mono.empty().block() returns null
 
             // Act
-            List<DailyValueDto> result = provider.fetchDailyValues("BTC", TEST_DATE, API_URL);
+            List<DailyValueDto> result = provider.fetchDailyValues("BTC", TEST_DATE, TEST_DATE, API_URL);
 
             // Assert
             assertThat(result).isNotNull().isEmpty();
@@ -216,7 +216,7 @@ class HyperliquidAssetDataProviderTest {
                 .thenReturn(Mono.just(List.of()));
 
             // Act
-            List<DailyValueDto> result = provider.fetchDailyValues("BTC", TEST_DATE, API_URL);
+            List<DailyValueDto> result = provider.fetchDailyValues("BTC", TEST_DATE, TEST_DATE, API_URL);
 
             // Assert
             assertThat(result).isNotNull().isEmpty();
@@ -231,7 +231,7 @@ class HyperliquidAssetDataProviderTest {
                 .thenReturn(Mono.error(new RuntimeException("HTTP 500 Internal Server Error")));
 
             // Act — must not throw
-            List<DailyValueDto> result = provider.fetchDailyValues("BTC", TEST_DATE, API_URL);
+            List<DailyValueDto> result = provider.fetchDailyValues("BTC", TEST_DATE, TEST_DATE, API_URL);
 
             // Assert: provider swallows the exception and returns empty list
             assertThat(result).isNotNull().isEmpty();
@@ -246,7 +246,7 @@ class HyperliquidAssetDataProviderTest {
                 .thenReturn(Mono.error(new java.util.concurrent.TimeoutException("Connection timed out")));
 
             // Act
-            List<DailyValueDto> result = provider.fetchDailyValues("ETH", TEST_DATE, API_URL);
+            List<DailyValueDto> result = provider.fetchDailyValues("ETH", TEST_DATE, TEST_DATE, API_URL);
 
             // Assert
             assertThat(result).isNotNull().isEmpty();

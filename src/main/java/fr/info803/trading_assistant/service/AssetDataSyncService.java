@@ -101,11 +101,16 @@ public class AssetDataSyncService {
     /*
         Synchronise toutes les sources/assets pour une date donnée.
 
+        Wrapper autour de fetchDailyValues(symbol, startDate, endDate, apiUrl) :
+        passe startDate == endDate == targetDate pour ne récupérer qu'un seul jour.
+        C'est la méthode utilisée par le scheduler nocturne et l'ancienne boucle
+        du DevDataInitializer.
+
         Flux d'exécution :
           1. Charge toutes les AssetSources depuis la DB.
           2. Pour chaque source, vérifie qu'un provider existe.
           3. Charge tous les assets de cette source.
-          4. Pour chaque asset, appelle le provider et upsert la valeur en DB.
+          4. Pour chaque asset, appelle le provider (startDate == endDate) et upsert la valeur en DB.
 
         Visibility: public pour permettre les appels cross-package depuis DevDataInitializer
         et les futurs endpoints admin. Testable via Mockito.spy().
@@ -136,8 +141,9 @@ public class AssetDataSyncService {
 
             for (Asset asset : assets) {
                 try {
+                    // Wrapper : startDate == endDate == targetDate → une seule bougie
                     List<DailyValueDto> values = provider.fetchDailyValues(
-                        asset.getSymbol(), targetDate, source.getUrl()
+                        asset.getSymbol(), targetDate, targetDate, source.getUrl()
                     );
 
                     for (DailyValueDto dto : values) {
@@ -159,6 +165,79 @@ public class AssetDataSyncService {
         }
 
         log.info("Daily price sync completed. synced={} failed={} date={}", totalSynced, totalFailed, targetDate);
+    }
+
+    /*
+        Synchronise toutes les sources/assets pour un intervalle de dates en un seul appel
+        API par asset — beaucoup plus efficace que d'appeler syncForDate() en boucle.
+
+        Utilisée par DevDataInitializer pour charger 1 an d'historique au démarrage :
+          syncForDateRange(LocalDate.now().minusDays(365), LocalDate.now().minusDays(1))
+        → 1 appel HTTP par asset au lieu de 365.
+
+        Flux d'exécution :
+          1. Charge toutes les AssetSources depuis la DB.
+          2. Pour chaque source, vérifie qu'un provider existe.
+          3. Charge tous les assets de cette source.
+          4. Pour chaque asset, appelle le provider avec l'intervalle complet.
+          5. Upsert chaque bougie retournée en DB.
+
+        Visibility: public pour permettre les appels cross-package (DevDataInitializer,
+        futurs endpoints admin).
+    */
+    public void syncForDateRange(LocalDate startDate, LocalDate endDate) {
+        log.info("Starting bulk price sync for range [{} → {}]", startDate, endDate);
+
+        List<AssetSource> sources = assetSourceRepository.findAll();
+
+        if (sources.isEmpty()) {
+            log.warn("No AssetSource found in database. Add sources and assets to enable sync.");
+            return;
+        }
+
+        int totalSynced = 0;
+        int totalFailed = 0;
+
+        for (AssetSource source : sources) {
+            AssetDataProvider provider = providersByName.get(source.getName());
+
+            if (provider == null) {
+                log.warn("No provider registered for source='{}'. Skipping.", source.getName());
+                continue;
+            }
+
+            List<Asset> assets = assetRepository.findBySource(source);
+            log.info("Bulk syncing {} asset(s) from source='{}' for range [{} → {}]",
+                assets.size(), source.getName(), startDate, endDate);
+
+            for (Asset asset : assets) {
+                try {
+                    List<DailyValueDto> values = provider.fetchDailyValues(
+                        asset.getSymbol(), startDate, endDate, source.getUrl()
+                    );
+
+                    for (DailyValueDto dto : values) {
+                        upsertDailyValue(asset, dto);
+                        totalSynced++;
+                    }
+
+                    if (values.isEmpty()) {
+                        log.warn("No data returned for asset='{}' range=[{} → {}]",
+                            asset.getSymbol(), startDate, endDate);
+                        totalFailed++;
+                    } else {
+                        log.info("Synced {} candle(s) for asset='{}'", values.size(), asset.getSymbol());
+                    }
+
+                } catch (Exception e) {
+                    log.error("Failed to sync asset='{}': {}", asset.getSymbol(), e.getMessage());
+                    totalFailed++;
+                }
+            }
+        }
+
+        log.info("Bulk price sync completed. synced={} failed={} range=[{} → {}]",
+            totalSynced, totalFailed, startDate, endDate);
     }
 
     /*

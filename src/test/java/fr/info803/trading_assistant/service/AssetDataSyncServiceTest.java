@@ -50,6 +50,9 @@ import fr.info803.trading_assistant.repository.AssetSourceRepository;
  * - syncForDate() calls upsertDailyValue() once per returned DTO
  * - syncForDate() counts correctly when the provider returns an empty list
  * - syncForDate() continues with remaining assets when one throws
+ * - syncForDateRange() calls provider with the full date range and upserts all candles
+ * - syncForDateRange() skips when no AssetSource exists
+ * - syncForDateRange() continues with remaining assets when one throws
  * - upsertDailyValue() performs INSERT when (asset, date) is not yet in DB
  * - upsertDailyValue() performs UPDATE when (asset, date) already exists
  */
@@ -121,7 +124,7 @@ class AssetDataSyncServiceTest {
 
             // Assert: provider and asset repository were never consulted
             verify(assetRepository, never()).findBySource(any());
-            verify(hyperliquidProvider, never()).fetchDailyValues(any(), any(), any());
+            verify(hyperliquidProvider, never()).fetchDailyValues(any(), any(), any(), any());
         }
 
         @Test
@@ -141,7 +144,7 @@ class AssetDataSyncServiceTest {
 
             // Assert: assets are never fetched for this source
             verify(assetRepository, never()).findBySource(any());
-            verify(hyperliquidProvider, never()).fetchDailyValues(any(), any(), any());
+            verify(hyperliquidProvider, never()).fetchDailyValues(any(), any(), any(), any());
         }
 
         @Test
@@ -153,7 +156,7 @@ class AssetDataSyncServiceTest {
             when(assetSourceRepository.findAll()).thenReturn(List.of(hyperliquidSource));
             when(assetRepository.findBySource(hyperliquidSource)).thenReturn(List.of(btcAsset));
             when(hyperliquidProvider.fetchDailyValues(
-                eq("BTC"), eq(TEST_DATE), eq("https://api.hyperliquid.xyz/info")
+                eq("BTC"), eq(TEST_DATE), eq(TEST_DATE), eq("https://api.hyperliquid.xyz/info")
             )).thenReturn(List.of(dto));
 
             // Spy so we can stub upsertDailyValue without hitting the DB
@@ -173,7 +176,7 @@ class AssetDataSyncServiceTest {
             // Arrange
             when(assetSourceRepository.findAll()).thenReturn(List.of(hyperliquidSource));
             when(assetRepository.findBySource(hyperliquidSource)).thenReturn(List.of(btcAsset));
-            when(hyperliquidProvider.fetchDailyValues(any(), any(), any()))
+            when(hyperliquidProvider.fetchDailyValues(any(), any(), any(), any()))
                 .thenReturn(Collections.emptyList());
 
             AssetDataSyncService spied = spy(service);
@@ -197,9 +200,9 @@ class AssetDataSyncServiceTest {
             when(assetSourceRepository.findAll()).thenReturn(List.of(hyperliquidSource));
             when(assetRepository.findBySource(hyperliquidSource))
                 .thenReturn(List.of(btcAsset, ethAsset));
-            when(hyperliquidProvider.fetchDailyValues(eq("BTC"), any(), any()))
+            when(hyperliquidProvider.fetchDailyValues(eq("BTC"), any(), any(), any()))
                 .thenReturn(List.of(btcDto));
-            when(hyperliquidProvider.fetchDailyValues(eq("ETH"), any(), any()))
+            when(hyperliquidProvider.fetchDailyValues(eq("ETH"), any(), any(), any()))
                 .thenReturn(List.of(ethDto));
 
             AssetDataSyncService spied = spy(service);
@@ -225,9 +228,9 @@ class AssetDataSyncServiceTest {
                 .thenReturn(List.of(btcAsset, ethAsset));
 
             // BTC throws, ETH succeeds
-            when(hyperliquidProvider.fetchDailyValues(eq("BTC"), any(), any()))
+            when(hyperliquidProvider.fetchDailyValues(eq("BTC"), any(), any(), any()))
                 .thenThrow(new RuntimeException("network error"));
-            when(hyperliquidProvider.fetchDailyValues(eq("ETH"), any(), any()))
+            when(hyperliquidProvider.fetchDailyValues(eq("ETH"), any(), any(), any()))
                 .thenReturn(List.of(ethDto));
 
             AssetDataSyncService spied = spy(service);
@@ -235,6 +238,86 @@ class AssetDataSyncServiceTest {
 
             // Act — must not throw
             spied.syncForDate(TEST_DATE);
+
+            // Assert: ETH was still synced despite BTC failure
+            verify(spied, never()).upsertDailyValue(eq(btcAsset), any());
+            verify(spied, times(1)).upsertDailyValue(eq(ethAsset), eq(ethDto));
+        }
+    }
+
+    // =========================================================================
+    // syncForDateRange() — bulk orchestration tests
+    // =========================================================================
+
+    @Nested
+    @DisplayName("syncForDateRange() — bulk orchestration")
+    class SyncForDateRangeTests {
+
+        private static final LocalDate RANGE_START = LocalDate.of(2024, 1, 15);
+        private static final LocalDate RANGE_END = LocalDate.of(2025, 1, 14);
+
+        @Test
+        @DisplayName("should do nothing when no AssetSource exists in DB")
+        void shouldSkipWhenNoSources() {
+            // Arrange
+            when(assetSourceRepository.findAll()).thenReturn(Collections.emptyList());
+
+            // Act
+            service.syncForDateRange(RANGE_START, RANGE_END);
+
+            // Assert
+            verify(assetRepository, never()).findBySource(any());
+            verify(hyperliquidProvider, never()).fetchDailyValues(any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("should call provider with the full date range and upsert all returned candles")
+        void shouldFetchRangeAndUpsertAllCandles() {
+            // Arrange: provider returns 3 candles for the range
+            DailyValueDto dto1 = buildDto(RANGE_START);
+            DailyValueDto dto2 = buildDto(RANGE_START.plusDays(1));
+            DailyValueDto dto3 = buildDto(RANGE_END);
+
+            when(assetSourceRepository.findAll()).thenReturn(List.of(hyperliquidSource));
+            when(assetRepository.findBySource(hyperliquidSource)).thenReturn(List.of(btcAsset));
+            when(hyperliquidProvider.fetchDailyValues(
+                eq("BTC"), eq(RANGE_START), eq(RANGE_END), eq("https://api.hyperliquid.xyz/info")
+            )).thenReturn(List.of(dto1, dto2, dto3));
+
+            AssetDataSyncService spied = spy(service);
+            doNothing().when(spied).upsertDailyValue(any(), any());
+
+            // Act
+            spied.syncForDateRange(RANGE_START, RANGE_END);
+
+            // Assert: upsert called once per candle (3 times)
+            verify(spied, times(3)).upsertDailyValue(eq(btcAsset), any());
+            verify(spied, times(1)).upsertDailyValue(eq(btcAsset), eq(dto1));
+            verify(spied, times(1)).upsertDailyValue(eq(btcAsset), eq(dto2));
+            verify(spied, times(1)).upsertDailyValue(eq(btcAsset), eq(dto3));
+        }
+
+        @Test
+        @DisplayName("should continue with remaining assets when one throws an exception")
+        void shouldContinueWhenOneAssetThrows() {
+            // Arrange
+            Asset ethAsset = Asset.builder().id(11L).symbol("ETH").source(hyperliquidSource).build();
+            DailyValueDto ethDto = buildDto(RANGE_START);
+
+            when(assetSourceRepository.findAll()).thenReturn(List.of(hyperliquidSource));
+            when(assetRepository.findBySource(hyperliquidSource))
+                .thenReturn(List.of(btcAsset, ethAsset));
+
+            when(hyperliquidProvider.fetchDailyValues(eq("BTC"), any(), any(), any()))
+                .thenThrow(new RuntimeException("network error"));
+            when(hyperliquidProvider.fetchDailyValues(eq("ETH"), any(), any(), any()))
+                .thenReturn(List.of(ethDto));
+
+            AssetDataSyncService spied = spy(service);
+            doNothing().when(spied).upsertDailyValue(any(), any());
+
+            // Act — must not throw
+            spied.syncForDateRange(RANGE_START, RANGE_END);
 
             // Assert: ETH was still synced despite BTC failure
             verify(spied, never()).upsertDailyValue(eq(btcAsset), any());

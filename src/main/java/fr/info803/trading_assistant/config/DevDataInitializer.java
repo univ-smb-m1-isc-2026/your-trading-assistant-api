@@ -97,14 +97,15 @@ public class DevDataInitializer implements ApplicationRunner {
         assetRepository.saveAll(assets);
         log.info("[DevDataInitializer] Created {} assets: {}", assets.size(), SYMBOLS);
 
-        // Étape 3 — Synchronisation des 7 derniers jours
-        // On itère du plus ancien (J-7) au plus récent (J-1) pour un ordre chronologique.
-        // syncForDate() est package-private sur AssetDataSyncService — même méthode
-        // que le scheduler nocturne, simplement paramétrée par la date.
-        log.info("[DevDataInitializer] Triggering sync for the last 31 days...");
-        for (int i = 31; i >= 1; i--) {
-            assetDataSyncService.syncForDate(LocalDate.now().minusDays(i));
-        }
+        // Étape 3 — Synchronisation de 1 an d'historique en bulk
+        // syncForDateRange() appelle l'API une seule fois par asset avec un intervalle
+        // de 365 jours, au lieu de boucler jour par jour (365 appels × N assets → N appels).
+        // L'API Hyperliquid supporte nativement les intervalles via startTime/endTime.
+        LocalDate endDate = LocalDate.now().minusDays(1);
+        LocalDate startDate = LocalDate.now().minusDays(365);
+        log.info("[DevDataInitializer] Triggering bulk sync for 1 year of history [{} → {}]...",
+            startDate, endDate);
+        assetDataSyncService.syncForDateRange(startDate, endDate);
 
         log.info("[DevDataInitializer] Dev initialization complete.");
     }

@@ -61,6 +61,56 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
+    /*
+        400 Bad Request : paramètres de requête de moyenne mobile invalides.
+        Type de MA inconnu, période < 1, liste de périodes vide, etc.
+        Utilise un format de réponse dédié (message au lieu de symbol)
+        car l'erreur porte sur les paramètres, pas sur un asset.
+    */
+    @ExceptionHandler(InvalidMovingAverageRequestException.class)
+    public ResponseEntity<ValidationErrorResponse> handleInvalidMovingAverageRequest(
+            InvalidMovingAverageRequestException ex) {
+        ValidationErrorResponse error = ValidationErrorResponse.builder()
+            .error("Invalid moving average request")
+            .message(ex.getMessage())
+            .timestamp(LocalDateTime.now())
+            .build();
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+
+    record ValidationErrorResponse(String error, String message, LocalDateTime timestamp) {
+        static class Builder {
+            private String error;
+            private String message;
+            private LocalDateTime timestamp;
+
+            public Builder error(String error) {
+                this.error = error;
+                return this;
+            }
+
+            public Builder message(String message) {
+                this.message = message;
+                return this;
+            }
+
+            public Builder timestamp(LocalDateTime timestamp) {
+                this.timestamp = timestamp;
+                return this;
+            }
+
+            public ValidationErrorResponse build() {
+                return new ValidationErrorResponse(error, message, timestamp);
+            }
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
+    }
+
     // ───────────────────────────────────────────────────────────────────────
 
     record ErrorResponse(String error, String symbol, LocalDateTime timestamp) {

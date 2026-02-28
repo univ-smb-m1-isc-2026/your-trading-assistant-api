@@ -24,14 +24,15 @@ import fr.info803.trading_assistant.dto.DailyValueDto;
        - Permet au SyncService de faire la correspondance source DB ↔ provider code.
        - Exemple : "hyperliquid", "alphavantage"
 
-    2. fetchDailyValues(String symbol, LocalDate date, String apiUrl)
-       - Récupère les données OHLCV d'un asset pour une date donnée.
-       - symbol  : le ticker de l'asset (ex: "BTC", "ETH")
-       - date    : la date cible (en général J-1 car le scheduler tourne à minuit)
-       - apiUrl  : l'URL de base de l'API, lue depuis AssetSource.url en DB.
-                   Cela rend l'URL configurable sans redéploiement.
-       - Retourne List<DailyValueDto> : en général une seule entrée pour une date donnée,
-         mais List permet de gérer des cas où l'API retourne plusieurs bougies.
+    2. fetchDailyValues(String symbol, LocalDate startDate, LocalDate endDate, String apiUrl)
+       - Récupère les données OHLCV d'un asset pour un intervalle de dates donné.
+       - symbol    : le ticker de l'asset (ex: "BTC", "ETH")
+       - startDate : début de l'intervalle (inclus)
+       - endDate   : fin de l'intervalle (inclus)
+       - apiUrl    : l'URL de base de l'API, lue depuis AssetSource.url en DB.
+                     Cela rend l'URL configurable sans redéploiement.
+       - Retourne List<DailyValueDto> : une entrée par bougie journalière dans l'intervalle.
+         Pour un seul jour, passer startDate == endDate → retourne une seule bougie.
        - En cas d'erreur réseau ou de parsing, le provider doit retourner une liste vide
          (jamais lever d'exception non gérée) pour permettre au SyncService de continuer
          avec les autres assets.
@@ -40,5 +41,5 @@ public interface AssetDataProvider {
 
     String getSourceName();
 
-    List<DailyValueDto> fetchDailyValues(String symbol, LocalDate date, String apiUrl);
+    List<DailyValueDto> fetchDailyValues(String symbol, LocalDate startDate, LocalDate endDate, String apiUrl);
 }

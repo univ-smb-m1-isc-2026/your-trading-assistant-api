@@ -1,6 +1,7 @@
 package fr.info803.trading_assistant.service;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Collections;
@@ -87,21 +88,28 @@ public class HyperliquidAssetDataProvider implements AssetDataProvider {
     }
 
     /*
-        Récupère les données OHLCV journalières pour un symbole donné et une date donnée.
+        Récupère les données OHLCV journalières pour un symbole donné sur un intervalle de dates.
 
         Paramètres :
-          - symbol : ticker de l'asset (ex: "BTC", "ETH")
-          - date   : date cible (en général LocalDate.now().minusDays(1))
-          - apiUrl : URL lue depuis AssetSource.url en DB
-                     (ex: "https://api.hyperliquid.xyz/info")
+          - symbol    : ticker de l'asset (ex: "BTC", "ETH")
+          - startDate : début de l'intervalle, inclus (ex: LocalDate.now().minusDays(365))
+          - endDate   : fin de l'intervalle, inclus (ex: LocalDate.now().minusDays(1))
+          - apiUrl    : URL lue depuis AssetSource.url en DB
+                        (ex: "https://api.hyperliquid.xyz/info")
+
+        L'API retourne toutes les bougies journalières dans l'intervalle en un seul appel.
+        Pour un seul jour (scheduler nocturne), passer startDate == endDate.
+
+        Chaque bougie est convertie en DailyValueDto avec la date déduite du timestamp
+        d'ouverture (champ "t") retourné par l'API — pas besoin de l'interpoler côté client.
     */
     @Override
-    public List<DailyValueDto> fetchDailyValues(String symbol, LocalDate date, String apiUrl) {
-        // Calcul des timestamps UTC en millisecondes pour le jour cible.
-        // startTime = minuit UTC du jour cible (ex: 2025-01-14T00:00:00Z)
-        // endTime   = 1ms avant minuit UTC du lendemain (ex: 2025-01-14T23:59:59.999Z)
-        long startTime = date.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
-        long endTime = date.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() - 1;
+    public List<DailyValueDto> fetchDailyValues(String symbol, LocalDate startDate, LocalDate endDate, String apiUrl) {
+        // Calcul des timestamps UTC en millisecondes pour l'intervalle cible.
+        // startTime = minuit UTC du jour startDate (ex: 2025-01-14T00:00:00Z)
+        // endTime   = 1ms avant minuit UTC du lendemain de endDate (ex: 2025-01-15T23:59:59.999Z)
+        long startTime = startDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+        long endTime = endDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() - 1;
 
         HyperliquidCandleRequest requestBody = new HyperliquidCandleRequest(
             "candleSnapshot",
@@ -109,7 +117,7 @@ public class HyperliquidAssetDataProvider implements AssetDataProvider {
         );
 
         try {
-            log.info("Hyperliquid: fetching {} for date={}", symbol, date);
+            log.info("Hyperliquid: fetching {} for range [{} → {}]", symbol, startDate, endDate);
 
             List<HyperliquidCandle> candles = webClient.post()
                 .uri(apiUrl)
@@ -124,13 +132,18 @@ public class HyperliquidAssetDataProvider implements AssetDataProvider {
                 .block();
 
             if (candles == null || candles.isEmpty()) {
-                log.warn("Hyperliquid: no candle data returned for symbol={} date={}", symbol, date);
+                log.warn("Hyperliquid: no candle data returned for symbol={} range=[{} → {}]",
+                    symbol, startDate, endDate);
                 return Collections.emptyList();
             }
 
+            // Chaque bougie porte son propre timestamp d'ouverture (champ "t").
+            // On en déduit la date UTC du jour correspondant pour le DailyValueDto,
+            // au lieu de réutiliser un paramètre "date" unique.
             return candles.stream()
                 .map(candle -> DailyValueDto.builder()
-                    .date(date)
+                    .date(LocalDate.ofInstant(
+                        Instant.ofEpochMilli(candle.openTime()), ZoneOffset.UTC))
                     .open(new BigDecimal(candle.open()))
                     .high(new BigDecimal(candle.high()))
                     .low(new BigDecimal(candle.low()))
@@ -140,8 +153,8 @@ public class HyperliquidAssetDataProvider implements AssetDataProvider {
                 .toList();
 
         } catch (Exception e) {
-            log.error("Hyperliquid: failed to fetch data for symbol={} date={} — {}",
-                symbol, date, e.getMessage());
+            log.error("Hyperliquid: failed to fetch data for symbol={} range=[{} → {}] — {}",
+                symbol, startDate, endDate, e.getMessage());
             return Collections.emptyList();
         }
     }

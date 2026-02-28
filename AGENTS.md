@@ -11,12 +11,12 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Stack:** Java 21, Spring Boot 4.0.2, Maven. Jackson 3.x (group ID `tools.jackson`, NOT `com.fasterxml.jackson`).
 - **Architecture:** Standard Layered Architecture.
   - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`, `DevDataInitializer`).
-  - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`).
-  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `HyperliquidAssetDataProvider`).
-  - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository` — all extend `JpaRepository`).
-  - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`).
+  - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`, `FavoriteController`).
+  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `HyperliquidAssetDataProvider`, `FavoriteService`).
+  - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository`, `AccountFavoriteAssetRepository` — all extend `JpaRepository`).
+  - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`, `AccountFavoriteAsset`).
   - `dto`: Data Transfer Objects (`RegisterRequest`, `LoginRequest`, `AuthResponse`, `AssetSummaryResponse`, `CandleResponse`).
-  - `exception`: Custom exceptions and global handler (`AssetNotFoundException`, `GlobalExceptionHandler` with inner `record ErrorResponse`).
+  - `exception`: Custom exceptions and global handler (`AssetNotFoundException`, `FavoriteAlreadyExistsException`, `FavoriteNotFoundException`, `GlobalExceptionHandler` with inner `record ErrorResponse`).
 - **Domain:** A trading assistant application to manage assets, strategies, and market analysis.
 - **Authentication:** Fully implemented. JWT-based stateless auth via `/auth/register` and `/auth/login`. All other endpoints require a valid Bearer token.
 - **Asset API:** Implemented. `GET /assets` returns all assets with their latest price sorted alphabetically. `GET /assets/{symbol}/candles` returns 1 year of daily OHLCV candles for a given symbol (404 if unknown).

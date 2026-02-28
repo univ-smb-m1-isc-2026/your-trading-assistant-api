@@ -13,8 +13,10 @@ import org.springframework.stereotype.Service;
 
 import fr.info803.trading_assistant.entity.Account;
 import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 
 /*
     Service responsable de toutes les opérations liées aux tokens JWT.
@@ -35,6 +37,7 @@ import io.jsonwebtoken.security.Keys;
       "exp": 1700086400          <- expiration (iat + 24h)
     }
 */
+@Slf4j
 @Service
 public class JwtService {
 
@@ -74,17 +77,22 @@ public class JwtService {
         Retourne false si l'email extrait est null (token malformé ou invalide).
     */
     public boolean isTokenValid(String token, Account account) {
-        final String email = extractEmail(token);
-        // Si email est null, le token est malformé/invalide, donc pas valide
-        if (email == null) {
+        try {
+            final String email = extractEmail(token);
+            // Si email est null, le token est malformé/invalide, donc pas valide
+            if (email == null) {
+                return false;
+            }
+            return email.equals(account.getEmail()) && !isTokenExpired(token);
+        } catch (JwtException e) {
+            log.debug("Token validation failed: {}", e.getMessage());
             return false;
         }
-        return email.equals(account.getEmail()) && !isTokenExpired(token);
     }
 
     // --- Méthodes privées utilitaires ---
 
-    private boolean isTokenExpired(String token) {
+    boolean isTokenExpired(String token) {
         return extractExpiration(token).before(new Date());
     }
 

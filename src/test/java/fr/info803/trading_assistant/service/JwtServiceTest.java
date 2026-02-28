@@ -7,6 +7,8 @@ import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.doReturn;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -268,39 +270,36 @@ class JwtServiceTest {
             assertThat(isValid).isFalse();
         }
 
-        @Test
-        @DisplayName("should return false when token is expired")
-        void shouldReturnFalseWhenTokenIsExpired() throws IllegalAccessException, InterruptedException {
-            // Arrange
-            Account account = Account.builder()
-                    .id(9L)
-                    .username("Dave")
-                    .email("dave@example.com")
-                    .password("hash")
-                    .role(Role.ROLE_USER)
-                    .build();
+         @Test
+         @DisplayName("should return false when token is expired")
+         void shouldReturnFalseWhenTokenIsExpired() throws IllegalAccessException, InterruptedException {
+             // Arrange
+             Account account = Account.builder()
+                     .id(9L)
+                     .username("Dave")
+                     .email("dave@example.com")
+                     .password("hash")
+                     .role(Role.ROLE_USER)
+                     .build();
 
-            // Set expiration to 1ms (effectively immediate expiration)
-            setPrivateField(jwtService, "expirationMs", 1L);
+             // Set expiration to 1ms (effectively immediate expiration)
+             setPrivateField(jwtService, "expirationMs", 1L);
 
-            String token = jwtService.generateToken(account);
+             String token = jwtService.generateToken(account);
 
-            // Reset expiration back to normal for validation
-            setPrivateField(jwtService, "expirationMs", TEST_EXPIRATION_MS);
+             // Reset expiration back to normal for validation
+             setPrivateField(jwtService, "expirationMs", TEST_EXPIRATION_MS);
 
-            // Wait for token to expire
-            Thread.sleep(10);
+             // Wait for token to expire
+             Thread.sleep(10);
 
-            // Act & Assert
-            // isTokenValid() should return false for expired token
-            // Note: It may throw ExpiredJwtException when trying to parse, which is also acceptable
-            try {
-                boolean isValid = jwtService.isTokenValid(token, account);
-                assertThat(isValid).isFalse();
-            } catch (Exception e) {
-                // ExpiredJwtException is acceptable - token is definitely expired
-                assertThat(e.getMessage()).containsIgnoringCase("expired");
-            }
+             // Act
+             // isTokenValid() now catches JwtException (including ExpiredJwtException)
+             // and returns false, so it should not throw.
+             boolean isValid = jwtService.isTokenValid(token, account);
+
+             // Assert
+             assertThat(isValid).isFalse();
         }
     }
 
@@ -346,104 +345,75 @@ class JwtServiceTest {
          }
      }
 
-     // ============================================================================
-     // NULL EMAIL HANDLING TESTS
-     // ============================================================================
+      // ============================================================================
+      // BRANCH COVERAGE TESTS FOR isTokenValid()
+      // ============================================================================
 
-     @Nested
-     @DisplayName("Null Email Handling")
-     class NullEmailHandlingTests {
+      @Nested
+      @DisplayName("Branch Coverage for isTokenValid()")
+      class BranchCoverageTests {
 
-         @Test
-         @DisplayName("should return false when email extraction returns null")
-         void shouldReturnFalseWhenEmailExtractionReturnsNull() {
-             // Arrange
-             Account account = Account.builder()
-                     .id(11L)
-                     .username("Frank")
-                     .email("frank@example.com")
-                     .password("hash")
-                     .role(Role.ROLE_USER)
-                     .build();
+          @Test
+          @DisplayName("Branch 1: should return false when token has null subject (email)")
+          void shouldReturnFalseWhenTokenHasNullSubject() {
+              // Arrange
+              Account account = Account.builder()
+                      .id(11L)
+                      .username("Frank")
+                      .email("frank@example.com")
+                      .password("hash")
+                      .role(Role.ROLE_USER)
+                      .build();
 
-             // Create a token with valid structure but craft a scenario where
-             // extractEmail would theoretically return null.
-             // Since extractEmail calls extractClaim which calls extractAllClaims,
-             // we test by passing a malformed token that causes parsing issues.
-             // The null check in isTokenValid should prevent NPE.
-             
-             String malformedToken = "invalid.token.structure";
+              // Build a JWT with no subject claim (null sub)
+              // This reaches the "if (email == null)" branch at line 83-84
+              byte[] keyBytes = TEST_SECRET.getBytes(StandardCharsets.UTF_8);
+              String tokenWithNullSubject = Jwts.builder()
+                      .claim("id", 11L)
+                      .claim("username", "Frank")
+                      .issuedAt(new Date())
+                      .expiration(new Date(System.currentTimeMillis() + TEST_EXPIRATION_MS))
+                      .signWith(Keys.hmacShaKeyFor(keyBytes))
+                      .compact();
+              // Note: No .subject(...) call = getSubject() will return null
 
-             // Act & Assert
-             // isTokenValid should handle gracefully when extractEmail throws
-             // or when the extraction logic would result in null.
-             // The implementation should not throw NPE due to the null check at line 79.
-             assertThatThrownBy(() -> jwtService.isTokenValid(malformedToken, account))
-                     .isInstanceOf(Exception.class)
-                     .doesNotHave(new org.assertj.core.api.Condition<Throwable>(
-                             ex -> ex instanceof NullPointerException,
-                             "should not be NullPointerException"));
-         }
+              // Act
+              boolean isValid = jwtService.isTokenValid(tokenWithNullSubject, account);
 
-         @Test
-         @DisplayName("should not throw NullPointerException on null email from isTokenValid")
-         void shouldNotThrowNullPointerExceptionOnNullEmailFromIsTokenValid() {
-             // Arrange
-             Account account = Account.builder()
-                     .id(12L)
-                     .username("Grace")
-                     .email("grace@example.com")
-                     .password("hash")
-                     .role(Role.ROLE_USER)
-                     .build();
+              // Assert
+              // Should return false due to null email (Branch 1 covered)
+              assertThat(isValid).isFalse();
+          }
 
-             // Malformed token that would cause extractEmail to throw
-             String malformedToken = "header.invalid.signature";
+          @Test
+          @DisplayName("Branch 4: should return false when email matches but token is expired")
+          void shouldReturnFalseWhenEmailMatchesButTokenExpired() {
+              // Arrange
+              Account account = Account.builder()
+                      .id(12L)
+                      .username("Grace")
+                      .email("grace@example.com")
+                      .password("hash")
+                      .role(Role.ROLE_USER)
+                      .build();
 
-             // Act & Assert
-             // The important thing is that isTokenValid doesn't crash with NPE
-             // even if extractEmail fails or returns null.
-             try {
-                 jwtService.isTokenValid(malformedToken, account);
-             } catch (Exception e) {
-                 // Any exception except NullPointerException is acceptable
-                 assertThat(e).isNotInstanceOf(NullPointerException.class);
-             }
-         }
+              // Create a valid token for the account
+              String token = jwtService.generateToken(account);
 
-         @Test
-         @DisplayName("should validate email match before checking expiration")
-         void shouldValidateEmailMatchBeforeCheckingExpiration() throws IllegalAccessException {
-             // Arrange
-             Account accountA = Account.builder()
-                     .id(13L)
-                     .username("Henry")
-                     .email("henry@example.com")
-                     .password("hash")
-                     .role(Role.ROLE_USER)
-                     .build();
+              // Spy on jwtService to force isTokenExpired to return true
+              // This simulates the case where:
+              // - email matches (grace@example.com == grace@example.com) ✓
+              // - but token is expired (isTokenExpired returns true) ✓
+              // - result: false (Branch 4 covered)
+              JwtService spiedService = spy(jwtService);
+              doReturn(true).when(spiedService).isTokenExpired(token);
 
-             Account accountB = Account.builder()
-                     .id(14L)
-                     .username("Iris")
-                     .email("iris@example.com")
-                     .password("hash")
-                     .role(Role.ROLE_USER)
-                     .build();
+              // Act
+              boolean isValid = spiedService.isTokenValid(token, account);
 
-             // Create a valid token for accountA
-             String tokenA = jwtService.generateToken(accountA);
-
-             // Set expiration to a very long time so it won't expire during test
-             setPrivateField(jwtService, "expirationMs", TEST_EXPIRATION_MS);
-
-             // Act
-             // Validate token from accountA with accountB's credentials
-             // This should return false due to email mismatch, regardless of expiration
-             boolean isValid = jwtService.isTokenValid(tokenA, accountB);
-
-             // Assert
-             assertThat(isValid).isFalse();
-         }
-     }
-}
+              // Assert
+              // Should return false: email matches && !isTokenExpired(true) = true && false = false
+              assertThat(isValid).isFalse();
+          }
+      }
+  }

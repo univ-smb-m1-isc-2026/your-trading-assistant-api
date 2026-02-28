@@ -10,6 +10,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import fr.info803.trading_assistant.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
@@ -80,5 +81,27 @@ public class ApplicationConfig {
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
+    }
+
+    /*
+        Déclare WebClient.Builder comme Bean Spring explicite.
+
+        Pourquoi ce bean est-il nécessaire ?
+          Spring Boot auto-configure WebClient.Builder UNIQUEMENT si la stack primaire
+          est WebFlux (reactive). Dans notre projet, la stack est WebMVC (servlet),
+          donc WebClient.Builder n'est PAS enregistré automatiquement malgré la présence
+          de spring-boot-starter-webflux dans le pom.xml.
+
+        En le déclarant ici, Spring peut l'injecter dans HyperliquidAssetDataProvider
+          (et tout futur provider) sans NoSuchBeanDefinitionException.
+
+        Pourquoi WebClient.Builder et non WebClient directement ?
+          Le Builder permet aux composants injectés de personnaliser l'instance
+          (base URL, headers communs, timeouts) via .baseUrl(), .defaultHeader(), etc.
+          Chaque composant appelle .build() pour obtenir sa propre instance WebClient.
+    */
+    @Bean
+    public WebClient.Builder webClientBuilder() {
+        return WebClient.builder();
     }
 }

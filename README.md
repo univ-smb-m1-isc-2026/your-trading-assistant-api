@@ -10,3 +10,16 @@ pour le local (dev):
 
 ## Test coverage
 `./mvnw clean test jacoco:report`
+
+
+## Auth
+Pour l'auth on a la route `/auth/..`
+
+### Register
+`/auth/register` avec email, username et password
+
+### Login
+`/auth/login` avec email et password
+
+
+Renvoie un JWT Token valable 24h (pour le moment)

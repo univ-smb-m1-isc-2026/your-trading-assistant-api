@@ -3,13 +3,13 @@ spring:
     name: trading-assistant
   profiles:
     active: prod # profil actif par défaut, remplacé par "dev" en développement local
-  # DB temporaire
-  h2:
-    console:
-      enabled: true
-  datasource:
-    url: jdbc:h2:mem:tradingdb
-    driver-class-name: org.h2.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate # production uses validate (schema already exists)
+
+# Configuration JWT
+# Le secret doit être une chaîne d'au moins 256 bits (32 caractères) pour HMAC-SHA256
+# En production, injectez la valeur via variable d'environnement Docker : JWT_SECRET
+jwt:
+  secret: ${JWT_SECRET:cette-cle-secrete-doit-etre-changee-en-production-elle-doit-faire-au-moins-256-bits}
+  expiration-ms: 86400000 # 24 heures

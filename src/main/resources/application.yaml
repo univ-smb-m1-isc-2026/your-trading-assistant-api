@@ -1,6 +1,8 @@
 spring:
   application:
     name: trading-assistant
+  profiles:
+    active: prod # profil actif par défaut, remplacé par "dev" en développement local
   # DB temporaire
   h2:
     console:

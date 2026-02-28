@@ -32,6 +32,35 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
+    /*
+        409 Conflict : l'asset est déjà dans les favoris de l'utilisateur.
+        On renvoie le même format ErrorResponse pour cohérence côté client.
+    */
+    @ExceptionHandler(FavoriteAlreadyExistsException.class)
+    public ResponseEntity<ErrorResponse> handleFavoriteAlreadyExists(FavoriteAlreadyExistsException ex) {
+        ErrorResponse error = ErrorResponse.builder()
+            .error("Asset already in favorites")
+            .symbol(ex.getSymbol())
+            .timestamp(LocalDateTime.now())
+            .build();
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    /*
+        404 Not Found : l'asset n'est pas dans les favoris de l'utilisateur.
+        Distinction avec AssetNotFoundException (asset inexistant en base) :
+        ici, l'asset existe bien, mais il n'est pas en favori pour cet utilisateur.
+    */
+    @ExceptionHandler(FavoriteNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleFavoriteNotFound(FavoriteNotFoundException ex) {
+        ErrorResponse error = ErrorResponse.builder()
+            .error("Asset not in favorites")
+            .symbol(ex.getSymbol())
+            .timestamp(LocalDateTime.now())
+            .build();
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
     // ───────────────────────────────────────────────────────────────────────
 
     record ErrorResponse(String error, String symbol, LocalDateTime timestamp) {

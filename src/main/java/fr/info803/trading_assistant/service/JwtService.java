@@ -90,8 +90,9 @@ public class JwtService {
         }
     }
 
-    // --- Méthodes privées utilitaires ---
+    // --- Méthodes utilitaires ---
 
+    // package-private for testability via Mockito.spy()
     boolean isTokenExpired(String token) {
         return extractExpiration(token).before(new Date());
     }

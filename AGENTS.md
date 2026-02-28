@@ -8,16 +8,18 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Proactive Testing Proposals:** After each feature addition or modification, you must propose a specific testing strategy. You must explain the different types of tests relevant to the change (e.g., Unit Tests for isolated logic, Integration Tests for API endpoints or database interactions) and wait for user confirmation before implementation.
 
 ## Project Overview
-- **Stack:** Java 21, Spring Boot 4.0+, Maven.
+- **Stack:** Java 21, Spring Boot 4.0.2, Maven. Jackson 3.x (group ID `tools.jackson`, NOT `com.fasterxml.jackson`).
 - **Architecture:** Standard Layered Architecture.
-  - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`).
-  - `controller`: Web and REST endpoints (e.g., `AuthController`, `HelloController`).
-  - `service`: Core business logic (e.g., `AccountService`, `JwtService`).
-  - `repository`: Data access layer (e.g., `AccountRepository` extends `JpaRepository`).
-  - `entity`: JPA entities (e.g., `Account` implements `UserDetails`, `Role` enum).
-  - `dto`: Data Transfer Objects for request/response (e.g., `RegisterRequest`, `LoginRequest`, `AuthResponse`).
+  - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`, `DevDataInitializer`).
+  - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`).
+  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `HyperliquidAssetDataProvider`).
+  - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository` — all extend `JpaRepository`).
+  - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`).
+  - `dto`: Data Transfer Objects (`RegisterRequest`, `LoginRequest`, `AuthResponse`, `AssetSummaryResponse`, `CandleResponse`).
+  - `exception`: Custom exceptions and global handler (`AssetNotFoundException`, `GlobalExceptionHandler` with inner `record ErrorResponse`).
 - **Domain:** A trading assistant application to manage assets, strategies, and market analysis.
 - **Authentication:** Fully implemented. JWT-based stateless auth via `/auth/register` and `/auth/login`. All other endpoints require a valid Bearer token.
+- **Asset API:** Implemented. `GET /assets` returns all assets with their latest price sorted alphabetically. `GET /assets/{symbol}/candles` returns 1 year of daily OHLCV candles for a given symbol (404 if unknown).
 
 ## Build, Lint, and Test Commands
 
@@ -35,6 +37,7 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Generate coverage report:** `./mvnw clean test jacoco:report`
   - Report generated at `target/site/jacoco/index.html`
   - *Note:* JaCoCo 0.8.12 emits `IllegalClassFormatException` warnings when run on Java 24 (class file major version 68). This is noise only — tests still pass and the report is generated correctly. See **Known Issues** below.
+- **Current test count:** 103 tests, all passing.
 
 ### Linting and Quality
 - **Check for dependency updates:** `./mvnw versions:display-plugin-updates`
@@ -94,16 +97,50 @@ This document provides instructions and guidelines for agentic coding agents wor
   // package-private for testability via Mockito.spy()
   boolean isTokenExpired(String token) { ... }
   ```
+- **Controller tests — use `standaloneSetup`, NOT `@WebMvcTest`:** `@WebMvcTest` loads `SecurityConfig → ApplicationConfig → AccountRepository` which is a repository not available in the web slice and causes context failure. Use `MockMvcBuilders.standaloneSetup()` instead:
+  ```java
+  MockMvc mockMvc = MockMvcBuilders
+      .standaloneSetup(new AssetController(assetService))
+      .setControllerAdvice(new GlobalExceptionHandler())
+      .build();
+  ```
+- **Jackson 3.x date fields in MockMvc tests:** Do NOT manually configure `JavaTimeModule` — the `jackson-datatype-jsr310` artifact no longer exists in Jackson 3.x; Java time support is built into `jackson-databind`. For `LocalDate`/`LocalDateTime` fields in standalone MockMvc assertions, use `.exists()` rather than `.value("2026-02-27")` since the exact format depends on Spring Boot autoconfiguration.
 
 ## Infrastructure & Configuration
 - **Database:** PostgreSQL driver included for production. H2 used for local development/testing.
-- **Security:** Configured in `SecurityConfig`. Public routes: `/auth/**` (register & login) and `/`. All other endpoints require a valid Bearer JWT token. CSRF is disabled (stateless API). Sessions are STATELESS.
+- **Security:** Configured in `SecurityConfig`. Public routes: `/auth/**` (register & login), `/`, and `/dev/**`. All other endpoints require a valid Bearer JWT token. CSRF is disabled (stateless API). Sessions are STATELESS.
 - **CORS:** Configured in `CorsConfig`. Allowed origin is read from `cors.allowed-origins` in `application-{profile}.yaml`.
 - **Configuration:** Properties managed in `src/main/resources/application.yaml`.
 
 ## Development Environment
+- **Run with dev profile (seeded data):** `./mvnw spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=dev"`
+  - Seeds 5 assets (BTC, ETH, AERO, SAGA, MANTA) with 31 days of candles fetched from the Hyperliquid API.
 - **H2 Console:** Available at `/h2-console` when the app is running.
 - **Hot Reload:** `spring-boot-devtools` is included for faster development cycles.
+
+## Manual curl testing (dev profile)
+
+```bash
+# 1. Register a user — note the field is "username", NOT "firstName"/"lastName"
+curl -s -X POST http://localhost:8080/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123","username":"testuser"}'
+
+# 2. Login and capture token
+TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}' \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+
+# 3. List assets (sorted A→Z, with latest price)
+curl -s http://localhost:8080/assets -H "Authorization: Bearer $TOKEN"
+
+# 4. Candles for a known symbol (~31 OHLCV entries)
+curl -s http://localhost:8080/assets/BTC/candles -H "Authorization: Bearer $TOKEN"
+
+# 5. Unknown symbol → 404 with {"error":"Asset not found","symbol":"UNKNOWN","timestamp":"..."}
+curl -s http://localhost:8080/assets/UNKNOWN/candles -H "Authorization: Bearer $TOKEN"
+```
 
 ## Common Tasks for Agents
 - **Adding a new Controller:**

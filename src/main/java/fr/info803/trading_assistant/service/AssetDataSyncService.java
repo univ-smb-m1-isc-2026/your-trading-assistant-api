@@ -20,6 +20,16 @@ import fr.info803.trading_assistant.repository.AssetSourceRepository;
 import lombok.extern.slf4j.Slf4j;
 
 /*
+    Note sur l'injection d'AlertService :
+    AssetDataSyncService a besoin d'AlertService pour évaluer les alertes
+    après la synchronisation nightly. On l'injecte via le constructeur
+    pour maintenir la cohérence avec le reste de l'injection (providers, repos).
+    L'évaluation n'est déclenchée QUE dans syncForDate() (scheduler nightly),
+    PAS dans syncForDateRange() (chargement historique DevDataInitializer)
+    car les alertes portent sur les données du jour, pas sur l'historique.
+*/
+
+/*
     Service orchestrateur de la synchronisation quotidienne des données de marché.
 
     Responsabilités :
@@ -57,27 +67,33 @@ public class AssetDataSyncService {
     private final AssetSourceRepository assetSourceRepository;
     private final AssetRepository assetRepository;
     private final AssetDailyValueRepository assetDailyValueRepository;
+    private final AlertService alertService;
 
     // Map<sourceName, provider> construite depuis la liste injectée par Spring.
     // Clé = AssetDataProvider.getSourceName() = AssetSource.name en DB.
     private final Map<String, AssetDataProvider> providersByName;
 
     /*
-        Injection de List<AssetDataProvider> :
+        Injection de List<AssetDataProvider> et AlertService :
           Spring détecte tous les beans implémentant AssetDataProvider dans le contexte
           et les injecte automatiquement. Actuellement : HyperliquidAssetDataProvider.
           Un 2ème provider (ex: AlphaVantageAssetDataProvider) sera automatiquement
           inclus dès qu'il sera créé et annoté @Component.
+
+          AlertService est injecté pour pouvoir évaluer les alertes actives
+          après chaque synchronisation nightly (dans syncForDate()).
     */
     public AssetDataSyncService(
         AssetSourceRepository assetSourceRepository,
         AssetRepository assetRepository,
         AssetDailyValueRepository assetDailyValueRepository,
+        AlertService alertService,
         List<AssetDataProvider> providers
     ) {
         this.assetSourceRepository = assetSourceRepository;
         this.assetRepository = assetRepository;
         this.assetDailyValueRepository = assetDailyValueRepository;
+        this.alertService = alertService;
         // Convertit la liste en Map pour un lookup O(1)
         this.providersByName = providers.stream()
             .collect(Collectors.toMap(AssetDataProvider::getSourceName, Function.identity()));
@@ -122,49 +138,56 @@ public class AssetDataSyncService {
 
         if (sources.isEmpty()) {
             log.warn("No AssetSource found in database. Add sources and assets to enable sync.");
-            return;
-        }
+        } else {
+            int totalSynced = 0;
+            int totalFailed = 0;
 
-        int totalSynced = 0;
-        int totalFailed = 0;
+            for (AssetSource source : sources) {
+                AssetDataProvider provider = providersByName.get(source.getName());
 
-        for (AssetSource source : sources) {
-            AssetDataProvider provider = providersByName.get(source.getName());
+                if (provider == null) {
+                    log.warn("No provider registered for source='{}'. Skipping.", source.getName());
+                    continue;
+                }
 
-            if (provider == null) {
-                log.warn("No provider registered for source='{}'. Skipping.", source.getName());
-                continue;
-            }
+                List<Asset> assets = assetRepository.findBySource(source);
+                log.info("Syncing {} asset(s) from source='{}'", assets.size(), source.getName());
 
-            List<Asset> assets = assetRepository.findBySource(source);
-            log.info("Syncing {} asset(s) from source='{}'", assets.size(), source.getName());
+                for (Asset asset : assets) {
+                    try {
+                        // Wrapper : startDate == endDate == targetDate → une seule bougie
+                        List<DailyValueDto> values = provider.fetchDailyValues(
+                            asset.getSymbol(), targetDate, targetDate, source.getUrl()
+                        );
 
-            for (Asset asset : assets) {
-                try {
-                    // Wrapper : startDate == endDate == targetDate → une seule bougie
-                    List<DailyValueDto> values = provider.fetchDailyValues(
-                        asset.getSymbol(), targetDate, targetDate, source.getUrl()
-                    );
+                        for (DailyValueDto dto : values) {
+                            upsertDailyValue(asset, dto);
+                            totalSynced++;
+                        }
 
-                    for (DailyValueDto dto : values) {
-                        upsertDailyValue(asset, dto);
-                        totalSynced++;
-                    }
+                        if (values.isEmpty()) {
+                            log.warn("No data returned for asset='{}' date={}", asset.getSymbol(), targetDate);
+                            totalFailed++;
+                        }
 
-                    if (values.isEmpty()) {
-                        log.warn("No data returned for asset='{}' date={}", asset.getSymbol(), targetDate);
+                    } catch (Exception e) {
+                        // On ne stoppe pas le sync pour les autres assets en cas d'erreur sur un seul.
+                        log.error("Failed to sync asset='{}': {}", asset.getSymbol(), e.getMessage());
                         totalFailed++;
                     }
-
-                } catch (Exception e) {
-                    // On ne stoppe pas le sync pour les autres assets en cas d'erreur sur un seul.
-                    log.error("Failed to sync asset='{}': {}", asset.getSymbol(), e.getMessage());
-                    totalFailed++;
                 }
             }
+
+            log.info("Daily price sync completed. synced={} failed={} date={}", totalSynced, totalFailed, targetDate);
         }
 
-        log.info("Daily price sync completed. synced={} failed={} date={}", totalSynced, totalFailed, targetDate);
+        // Évalue les alertes actives contre les bougies qui viennent d'être synchronisées.
+        // Placé APRÈS le sync pour s'assurer que toutes les bougies sont en DB avant évaluation.
+        // Exécuté même si aucune source n'existe : des alertes peuvent porter sur des assets
+        // dont les données ont été synchronisées précédemment (ex: via syncForDateRange).
+        // Si le sync a échoué pour certains assets, les alertes correspondantes seront
+        // simplement ignorées (pas de bougie → pas d'évaluation, voir AlertService.evaluateSingleAlert).
+        alertService.evaluateAlerts(targetDate);
     }
 
     /*

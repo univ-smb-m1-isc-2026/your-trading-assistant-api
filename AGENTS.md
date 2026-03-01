@@ -11,15 +11,16 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Stack:** Java 21, Spring Boot 4.0.2, Maven. Jackson 3.x (group ID `tools.jackson`, NOT `com.fasterxml.jackson`).
 - **Architecture:** Standard Layered Architecture.
   - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`, `DevDataInitializer`).
-  - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`, `FavoriteController`).
-  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `AssetDataProvider` (interface with date-range signature), `HyperliquidAssetDataProvider`, `FavoriteService`).
-  - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository`, `AccountFavoriteAssetRepository` — all extend `JpaRepository`).
-  - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`, `AccountFavoriteAsset`).
-  - `dto`: Data Transfer Objects (`RegisterRequest`, `LoginRequest`, `AuthResponse`, `AssetSummaryResponse`, `CandleResponse`).
-  - `exception`: Custom exceptions and global handler (`AssetNotFoundException`, `FavoriteAlreadyExistsException`, `FavoriteNotFoundException`, `GlobalExceptionHandler` with inner `record ErrorResponse`).
+  - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`, `FavoriteController`, `AlertController`).
+  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `AssetDataProvider` (interface with date-range signature), `HyperliquidAssetDataProvider`, `FavoriteService`, `AlertService`, `AlertEvaluator` (Strategy interface), `PriceThresholdEvaluator`, `VolumeThresholdEvaluator`).
+  - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository`, `AccountFavoriteAssetRepository`, `AlertRepository`, `TriggeredAlertRepository` — all extend `JpaRepository`).
+  - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`, `AccountFavoriteAsset`, `Alert`, `TriggeredAlert`, `AlertType` enum, `AlertDirection` enum).
+  - `dto`: Data Transfer Objects (`RegisterRequest`, `LoginRequest`, `AuthResponse`, `AssetSummaryResponse`, `CandleResponse`, `CreateAlertRequest`, `UpdateAlertRequest`, `AlertResponse`, `TriggeredAlertResponse`).
+  - `exception`: Custom exceptions and global handler (`AssetNotFoundException`, `FavoriteAlreadyExistsException`, `FavoriteNotFoundException`, `AlertNotFoundException`, `GlobalExceptionHandler` with inner `record ErrorResponse` and `record AlertErrorResponse`).
 - **Domain:** A trading assistant application to manage assets, strategies, and market analysis.
 - **Authentication:** Fully implemented. JWT-based stateless auth via `/auth/register` and `/auth/login`. All other endpoints require a valid Bearer token.
 - **Asset API:** Implemented. `GET /assets` returns all assets with their latest price sorted alphabetically. `GET /assets/{symbol}/candles` returns 1 year of daily OHLCV candles for a given symbol (404 if unknown).
+- **Alert API:** Implemented. Full CRUD for user-configured alerts + triggered alert history. Uses the **Strategy Pattern** (`AlertEvaluator` interface with `supports()` + `evaluate()`) for extensible alert evaluation. Current evaluators: `PriceThresholdEvaluator` (compares high/low price), `VolumeThresholdEvaluator` (compares volume). Alerts are evaluated during nightly sync (`AssetDataSyncService.syncForDate()`), NOT during bulk historical loads (`syncForDateRange()`). Anti-duplicate protection via unique constraint `(alert_id, candle_date)`. One-shot alerts (`recurring=false`) are automatically deactivated after triggering.
 
 ## Build, Lint, and Test Commands
 
@@ -37,7 +38,7 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Generate coverage report:** `./mvnw clean test jacoco:report`
   - Report generated at `target/site/jacoco/index.html`
   - *Note:* JaCoCo 0.8.12 emits `IllegalClassFormatException` warnings when run on Java 24 (class file major version 68). This is noise only — tests still pass and the report is generated correctly. See **Known Issues** below.
-- **Current test count:** 149 tests, all passing.
+- **Current test count:** 203 tests, all passing.
 
 ### Linting and Quality
 - **Check for dependency updates:** `./mvnw versions:display-plugin-updates`
@@ -105,6 +106,7 @@ This document provides instructions and guidelines for agentic coding agents wor
       .build();
   ```
 - **Jackson 3.x date fields in MockMvc tests:** Do NOT manually configure `JavaTimeModule` — the `jackson-datatype-jsr310` artifact no longer exists in Jackson 3.x; Java time support is built into `jackson-databind`. For `LocalDate`/`LocalDateTime` fields in standalone MockMvc assertions, use `.exists()` rather than `.value("2026-02-27")` since the exact format depends on Spring Boot autoconfiguration.
+- **`@InjectMocks` does NOT inject `List<>` parameters:** Mockito's `@InjectMocks` cannot inject a mock into a `List<SomeInterface>` constructor parameter. For services that take a `List<>` (e.g., `AlertService(... List<AlertEvaluator>)`), construct the service manually in `@BeforeEach` using `new AlertService(..., List.of(mockEvaluator))` instead of relying on `@InjectMocks`.
 
 ## Infrastructure & Configuration
 - **Database:** PostgreSQL driver included for production. H2 used for local development/testing.
@@ -140,6 +142,27 @@ curl -s http://localhost:8080/assets/BTC/candles -H "Authorization: Bearer $TOKE
 
 # 5. Unknown symbol → 404 with {"error":"Asset not found","symbol":"UNKNOWN","timestamp":"..."}
 curl -s http://localhost:8080/assets/UNKNOWN/candles -H "Authorization: Bearer $TOKEN"
+
+# 6. Create a price alert (ABOVE $100,000 on BTC, recurring)
+curl -s -X POST http://localhost:8080/alerts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"symbol":"BTC","type":"PRICE_THRESHOLD","direction":"ABOVE","thresholdValue":100000,"recurring":true}'
+
+# 7. List configured alerts
+curl -s http://localhost:8080/alerts -H "Authorization: Bearer $TOKEN"
+
+# 8. Update an alert (partial update — only change threshold)
+curl -s -X PUT http://localhost:8080/alerts/1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"thresholdValue":105000}'
+
+# 9. View triggered alert history
+curl -s http://localhost:8080/alerts/triggered -H "Authorization: Bearer $TOKEN"
+
+# 10. Delete an alert (and its triggered history)
+curl -s -X DELETE http://localhost:8080/alerts/1 -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Common Tasks for Agents

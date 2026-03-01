@@ -62,6 +62,21 @@ public class GlobalExceptionHandler {
     }
 
     /*
+        404 Not Found : l'alerte n'existe pas ou n'appartient pas à l'utilisateur.
+        Utilise un format dédié AlertErrorResponse car l'identifiant est un ID
+        numérique (Long) et non un symbol (String).
+    */
+    @ExceptionHandler(AlertNotFoundException.class)
+    public ResponseEntity<AlertErrorResponse> handleAlertNotFound(AlertNotFoundException ex) {
+        AlertErrorResponse error = AlertErrorResponse.builder()
+            .error("Alert not found")
+            .alertId(ex.getAlertId())
+            .timestamp(LocalDateTime.now())
+            .build();
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    /*
         400 Bad Request : paramètres de requête de moyenne mobile invalides.
         Type de MA inconnu, période < 1, liste de périodes vide, etc.
         Utilise un format de réponse dédié (message au lieu de symbol)
@@ -76,6 +91,39 @@ public class GlobalExceptionHandler {
             .timestamp(LocalDateTime.now())
             .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    // ───────────────────────────────────────────────────────────────────────
+
+    record AlertErrorResponse(String error, Long alertId, LocalDateTime timestamp) {
+        static class Builder {
+            private String error;
+            private Long alertId;
+            private LocalDateTime timestamp;
+
+            public Builder error(String error) {
+                this.error = error;
+                return this;
+            }
+
+            public Builder alertId(Long alertId) {
+                this.alertId = alertId;
+                return this;
+            }
+
+            public Builder timestamp(LocalDateTime timestamp) {
+                this.timestamp = timestamp;
+                return this;
+            }
+
+            public AlertErrorResponse build() {
+                return new AlertErrorResponse(error, alertId, timestamp);
+            }
+        }
+
+        public static Builder builder() {
+            return new Builder();
+        }
     }
 
     // ───────────────────────────────────────────────────────────────────────

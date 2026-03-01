@@ -64,6 +64,7 @@ class AssetDataSyncServiceTest {
     private AssetRepository assetRepository;
     private AssetDailyValueRepository assetDailyValueRepository;
     private AssetDataProvider hyperliquidProvider;
+    private AlertService alertService;
 
     // service under test
     private AssetDataSyncService service;
@@ -80,6 +81,7 @@ class AssetDataSyncServiceTest {
         assetRepository = mock(AssetRepository.class);
         assetDailyValueRepository = mock(AssetDailyValueRepository.class);
         hyperliquidProvider = mock(AssetDataProvider.class);
+        alertService = mock(AlertService.class);
 
         // Provider reports its name so the service can match it to the DB source
         when(hyperliquidProvider.getSourceName()).thenReturn("hyperliquid");
@@ -88,6 +90,7 @@ class AssetDataSyncServiceTest {
             assetSourceRepository,
             assetRepository,
             assetDailyValueRepository,
+            alertService,
             List.of(hyperliquidProvider)
         );
 
@@ -412,6 +415,73 @@ class AssetDataSyncServiceTest {
             ArgumentCaptor<LocalDate> captor = ArgumentCaptor.forClass(LocalDate.class);
             verify(spied, times(1)).syncForDate(captor.capture());
             assertThat(captor.getValue()).isEqualTo(expectedDate);
+        }
+    }
+
+    // =========================================================================
+    // Alert evaluation integration — syncForDate() calls evaluateAlerts()
+    // =========================================================================
+
+    @Nested
+    @DisplayName("syncForDate() — alert evaluation integration")
+    class AlertEvaluationIntegrationTests {
+
+        @Test
+        @DisplayName("should call alertService.evaluateAlerts() after syncing data")
+        void shouldCallEvaluateAlertsAfterSync() {
+            // Arrange: normal sync scenario with one asset
+            DailyValueDto dto = buildDto(TEST_DATE);
+
+            when(assetSourceRepository.findAll()).thenReturn(List.of(hyperliquidSource));
+            when(assetRepository.findBySource(hyperliquidSource)).thenReturn(List.of(btcAsset));
+            when(hyperliquidProvider.fetchDailyValues(
+                eq("BTC"), eq(TEST_DATE), eq(TEST_DATE), eq("https://api.hyperliquid.xyz/info")
+            )).thenReturn(List.of(dto));
+
+            AssetDataSyncService spied = spy(service);
+            doNothing().when(spied).upsertDailyValue(any(), any());
+
+            // Act
+            spied.syncForDate(TEST_DATE);
+
+            // Assert: evaluateAlerts() called exactly once with the sync date
+            verify(alertService, times(1)).evaluateAlerts(TEST_DATE);
+        }
+
+        @Test
+        @DisplayName("should call alertService.evaluateAlerts() even when no sources exist")
+        void shouldCallEvaluateAlertsEvenWhenNoSources() {
+            // Arrange: no sources → sync does nothing, but evaluateAlerts should still run
+            when(assetSourceRepository.findAll()).thenReturn(Collections.emptyList());
+
+            // Act
+            service.syncForDate(TEST_DATE);
+
+            // Assert: evaluateAlerts() is still called (alerts may exist even without new data)
+            verify(alertService, times(1)).evaluateAlerts(TEST_DATE);
+        }
+
+        @Test
+        @DisplayName("should NOT call alertService.evaluateAlerts() in syncForDateRange()")
+        void shouldNotCallEvaluateAlertsInSyncForDateRange() {
+            // Arrange: bulk sync scenario
+            LocalDate start = LocalDate.of(2024, 1, 15);
+            LocalDate end = LocalDate.of(2025, 1, 14);
+
+            when(assetSourceRepository.findAll()).thenReturn(List.of(hyperliquidSource));
+            when(assetRepository.findBySource(hyperliquidSource)).thenReturn(List.of(btcAsset));
+            when(hyperliquidProvider.fetchDailyValues(
+                eq("BTC"), eq(start), eq(end), eq("https://api.hyperliquid.xyz/info")
+            )).thenReturn(List.of(buildDto(start)));
+
+            AssetDataSyncService spied = spy(service);
+            doNothing().when(spied).upsertDailyValue(any(), any());
+
+            // Act
+            spied.syncForDateRange(start, end);
+
+            // Assert: evaluateAlerts() must NOT be called during bulk historical sync
+            verify(alertService, never()).evaluateAlerts(any());
         }
     }
 

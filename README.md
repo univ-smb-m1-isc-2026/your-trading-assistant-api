@@ -1,4 +1,6 @@
-
+## Stats:
+- 203 tests
+- 90% tests coverage 
 
 ## Start
 par defaut, on a le mode prod

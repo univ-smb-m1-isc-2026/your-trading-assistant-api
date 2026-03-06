@@ -47,6 +47,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/**").permitAll()             // register et login sont publics
                 .requestMatchers("/").permitAll()                    // route racine publique
+                .requestMatchers("/actuator/**").permitAll()         // monitoring public pour Prometheus
                 .requestMatchers("/dev/**").permitAll()              // outils de diagnostic dev (bean absent en prod)
                 .anyRequest().authenticated()                        // tout le reste requiert un JWT valide
             )

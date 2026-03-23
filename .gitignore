@@ -1,5 +1,5 @@
 
-dev-station/
+logs/
 *.log
 HELP.md
 target/

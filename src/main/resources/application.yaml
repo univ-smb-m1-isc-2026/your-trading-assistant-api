@@ -3,9 +3,6 @@ spring:
     name: trading-assistant
   profiles:
     active: prod # profil actif par défaut, remplacé par "dev" en développement local
-  jpa:
-    hibernate:
-      ddl-auto: validate # production uses validate (schema already exists)
 
 # Configuration JWT
 # Le secret doit être une chaîne d'au moins 256 bits (32 caractères) pour HMAC-SHA256

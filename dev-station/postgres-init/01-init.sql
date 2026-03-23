@@ -1,0 +1,3 @@
+-- The database schema and initial data are now handled automatically by Spring Boot
+-- via Hibernate (ddl-auto: update) and ProdDataInitializer.java.
+-- This folder is kept for PostgreSQL initialization scripts if needed in the future.

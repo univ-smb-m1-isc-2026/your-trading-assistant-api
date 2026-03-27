@@ -25,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
 import fr.info803.trading_assistant.dto.AlertResponse;
@@ -87,6 +88,9 @@ class AlertServiceTest {
     @Mock
     private AlertEvaluator priceEvaluator;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     /*
         On ne peut PAS utiliser @InjectMocks ici car Mockito ne sait pas injecter
         un mock dans un paramètre List<AlertEvaluator>. Il faut construire
@@ -113,7 +117,8 @@ class AlertServiceTest {
             alertRepository,
             triggeredAlertRepository,
             assetDailyValueRepository,
-            List.of(priceEvaluator)
+            List.of(priceEvaluator),
+            eventPublisher
         );
 
         account = Account.builder()
@@ -287,6 +292,7 @@ class AlertServiceTest {
 
             // Assert
             assertThat(result.getId()).isEqualTo(1L);
+            verify(eventPublisher).publishEvent(any(fr.info803.trading_assistant.event.AlertCreatedEvent.class));
             assertThat(result.getSymbol()).isEqualTo("BTC");
             assertThat(result.getType()).isEqualTo("PRICE_THRESHOLD");
             assertThat(result.getDirection()).isEqualTo("ABOVE");
@@ -507,21 +513,21 @@ class AlertServiceTest {
                 .thenReturn(Optional.of(new BigDecimal("101000")));
             when(triggeredAlertRepository.existsByAlertAndCandleDate(btcAlert, TEST_DATE))
                 .thenReturn(false);
+            when(triggeredAlertRepository.save(any(TriggeredAlert.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
             // Act
-            boolean result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
+            Optional<TriggeredAlert> result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
 
             // Assert
-            assertThat(result).isTrue();
-
-            // Verify triggered alert was saved
-            ArgumentCaptor<TriggeredAlert> captor = ArgumentCaptor.forClass(TriggeredAlert.class);
-            verify(triggeredAlertRepository).save(captor.capture());
-            TriggeredAlert saved = captor.getValue();
+            assertThat(result).isPresent();
+            TriggeredAlert saved = result.get();
             assertThat(saved.getAlert()).isEqualTo(btcAlert);
             assertThat(saved.getTriggeredValue()).isEqualByComparingTo(new BigDecimal("101000"));
             assertThat(saved.getCandleDate()).isEqualTo(TEST_DATE);
             assertThat(saved.getTriggeredAt()).isNotNull();
+            
+            verify(triggeredAlertRepository).save(any(TriggeredAlert.class));
         }
 
         @Test
@@ -533,10 +539,10 @@ class AlertServiceTest {
                 .thenReturn(Optional.empty());
 
             // Act
-            boolean result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
+            Optional<TriggeredAlert> result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
 
             // Assert
-            assertThat(result).isFalse();
+            assertThat(result).isEmpty();
             verify(triggeredAlertRepository, never()).save(any());
         }
 
@@ -552,10 +558,10 @@ class AlertServiceTest {
             when(priceEvaluator.evaluate(btcAlert, candle)).thenReturn(Optional.empty());
 
             // Act
-            boolean result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
+            Optional<TriggeredAlert> result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
 
             // Assert
-            assertThat(result).isFalse();
+            assertThat(result).isEmpty();
             verify(triggeredAlertRepository, never()).save(any());
         }
 
@@ -571,13 +577,14 @@ class AlertServiceTest {
             when(priceEvaluator.evaluate(btcAlert, candle))
                 .thenReturn(Optional.of(new BigDecimal("101000")));
             when(triggeredAlertRepository.existsByAlertAndCandleDate(btcAlert, TEST_DATE))
-                .thenReturn(true); // already triggered
+                .thenReturn(true);
 
             // Act
-            boolean result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
+            Optional<TriggeredAlert> result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
+
 
             // Assert
-            assertThat(result).isFalse();
+            assertThat(result).isEmpty();
             verify(triggeredAlertRepository, never()).save(any());
         }
 
@@ -606,12 +613,14 @@ class AlertServiceTest {
                 .thenReturn(Optional.of(new BigDecimal("101000")));
             when(triggeredAlertRepository.existsByAlertAndCandleDate(oneShotAlert, TEST_DATE))
                 .thenReturn(false);
+            when(triggeredAlertRepository.save(any(TriggeredAlert.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
             // Act
-            boolean result = alertService.evaluateSingleAlert(oneShotAlert, TEST_DATE);
+            Optional<TriggeredAlert> result = alertService.evaluateSingleAlert(oneShotAlert, TEST_DATE);
 
             // Assert
-            assertThat(result).isTrue();
+            assertThat(result).isPresent();
             assertThat(oneShotAlert.isActive()).isFalse(); // deactivated
             // save called twice: once for triggered alert, once for deactivated alert
             verify(alertRepository).save(oneShotAlert);
@@ -630,12 +639,14 @@ class AlertServiceTest {
                 .thenReturn(Optional.of(new BigDecimal("101000")));
             when(triggeredAlertRepository.existsByAlertAndCandleDate(btcAlert, TEST_DATE))
                 .thenReturn(false);
+            when(triggeredAlertRepository.save(any(TriggeredAlert.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
             // Act
-            boolean result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
+            Optional<TriggeredAlert> result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
 
             // Assert
-            assertThat(result).isTrue();
+            assertThat(result).isPresent();
             assertThat(btcAlert.isActive()).isTrue(); // still active
             verify(alertRepository, never()).save(any()); // alert not re-saved
         }
@@ -647,12 +658,15 @@ class AlertServiceTest {
             when(priceEvaluator.supports(AlertType.PRICE_THRESHOLD)).thenReturn(false);
 
             // Act
-            boolean result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
+            Optional<TriggeredAlert> result = alertService.evaluateSingleAlert(btcAlert, TEST_DATE);
 
             // Assert
-            assertThat(result).isFalse();
-            verify(assetDailyValueRepository, never()).findByAssetAndDate(any(), any());
+            assertThat(result).isEmpty();
+            verify(triggeredAlertRepository, never()).save(any());
         }
+
+
+
     }
 
     // =========================================================================

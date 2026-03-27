@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,8 @@ import fr.info803.trading_assistant.entity.AlertType;
 import fr.info803.trading_assistant.entity.Asset;
 import fr.info803.trading_assistant.entity.AssetDailyValue;
 import fr.info803.trading_assistant.entity.TriggeredAlert;
+import fr.info803.trading_assistant.event.AlertCreatedEvent;
+import fr.info803.trading_assistant.event.AlertsTriggeredEvent;
 import fr.info803.trading_assistant.exception.AlertNotFoundException;
 import fr.info803.trading_assistant.exception.AssetNotFoundException;
 import fr.info803.trading_assistant.repository.AccountRepository;
@@ -62,6 +65,7 @@ public class AlertService {
     private final TriggeredAlertRepository triggeredAlertRepository;
     private final AssetDailyValueRepository assetDailyValueRepository;
     private final List<AlertEvaluator> evaluators;
+    private final ApplicationEventPublisher eventPublisher;
 
     /*
         Charge l'utilisateur depuis la base.
@@ -180,6 +184,10 @@ public class AlertService {
 
         alert = alertRepository.save(alert);
         log.info("Created alert id={} for account={}", alert.getId(), email);
+        
+        // Notification Discord
+        eventPublisher.publishEvent(new AlertCreatedEvent(alert, email));
+        
         return toAlertResponse(alert);
     }
 
@@ -271,6 +279,7 @@ public class AlertService {
         - Si aucun évaluateur ne supporte le type, on log un warning et on skip.
         - Si aucune bougie n'existe pour l'asset à cette date, on skip.
     */
+   @Transactional
     public void evaluateAlerts(LocalDate date) {
         log.info("Evaluating alerts for date={}", date);
 
@@ -281,30 +290,35 @@ public class AlertService {
             return;
         }
 
-        int triggered = 0;
+        List<TriggeredAlert> newlyTriggered = new java.util.ArrayList<>();
         int skipped = 0;
 
         for (Alert alert : activeAlerts) {
             try {
-                triggered += evaluateSingleAlert(alert, date) ? 1 : 0;
+                Optional<TriggeredAlert> result = evaluateSingleAlert(alert, date);
+                result.ifPresent(newlyTriggered::add);
             } catch (Exception e) {
                 log.error("Failed to evaluate alert id={}: {}", alert.getId(), e.getMessage());
                 skipped++;
             }
         }
 
+        if (!newlyTriggered.isEmpty()) {
+            eventPublisher.publishEvent(new AlertsTriggeredEvent(newlyTriggered, date));
+        }
+
         log.info("Alert evaluation completed for date={}: triggered={} skipped={}",
-            date, triggered, skipped);
+            date, newlyTriggered.size(), skipped);
     }
 
     /*
         Évalue une seule alerte contre la bougie du jour.
-        Retourne true si l'alerte a été déclenchée, false sinon.
+        Retourne l'objet TriggeredAlert si l'alerte a été déclenchée, Optional.empty() sinon.
 
         Visibility: package-private pour testabilité via Mockito.spy().
     */
     // package-private for testability via Mockito.spy()
-    boolean evaluateSingleAlert(Alert alert, LocalDate date) {
+    Optional<TriggeredAlert> evaluateSingleAlert(Alert alert, LocalDate date) {
         // 1. Trouver l'évaluateur pour ce type d'alerte
         Optional<AlertEvaluator> evaluatorOpt = evaluators.stream()
             .filter(e -> e.supports(alert.getType()))
@@ -312,7 +326,7 @@ public class AlertService {
 
         if (evaluatorOpt.isEmpty()) {
             log.warn("No evaluator found for alert type={}", alert.getType());
-            return false;
+            return Optional.empty();
         }
 
         // 2. Récupérer la bougie du jour pour l'asset de l'alerte
@@ -322,20 +336,20 @@ public class AlertService {
         if (candleOpt.isEmpty()) {
             log.debug("No candle for asset='{}' date={}, skipping alert id={}",
                 alert.getAsset().getSymbol(), date, alert.getId());
-            return false;
+            return Optional.empty();
         }
 
         // 3. Évaluer la condition
         Optional<BigDecimal> result = evaluatorOpt.get().evaluate(alert, candleOpt.get());
 
         if (result.isEmpty()) {
-            return false;
+            return Optional.empty();
         }
 
         // 4. Anti-doublon : ne pas déclencher deux fois pour la même date
         if (triggeredAlertRepository.existsByAlertAndCandleDate(alert, date)) {
             log.debug("Alert id={} already triggered for date={}, skipping", alert.getId(), date);
-            return false;
+            return Optional.empty();
         }
 
         // 5. Créer le déclenchement
@@ -346,7 +360,7 @@ public class AlertService {
             .triggeredAt(LocalDateTime.now())
             .build();
 
-        triggeredAlertRepository.save(triggeredAlert);
+        triggeredAlert = triggeredAlertRepository.save(triggeredAlert);
         log.info("Alert id={} triggered for asset='{}' date={} value={}",
             alert.getId(), alert.getAsset().getSymbol(), date, result.get());
 
@@ -357,7 +371,7 @@ public class AlertService {
             log.info("One-shot alert id={} deactivated", alert.getId());
         }
 
-        return true;
+        return Optional.of(triggeredAlert);
     }
 
     // ─────────────────────────────────────────────────────────────────────

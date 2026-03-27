@@ -12,3 +12,10 @@ spring:
 # Configuration Discord
 discord:
   webhook-url: ${DISCORD_WEBHOOK_URL}
+
+# Configuration Actuator (Monitoring / Metrics)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "prometheus, health, info"

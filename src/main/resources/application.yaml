@@ -14,3 +14,13 @@ jwt:
 # Configuration Discord
 discord:
   webhook-url: ${DISCORD_WEBHOOK_URL}
+
+# Configuration Actuator (Monitoring / Metrics)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "prometheus, health, info"
+  metrics:
+    tags:
+      application: ${spring.application.name}

@@ -34,9 +34,19 @@ public class CreateAlertRequest {
     @NotBlank(message = "La direction est obligatoire")
     private String direction;
 
-    @NotNull(message = "La valeur du seuil est obligatoire")
+    // Obligatoire pour PRICE_THRESHOLD et VOLUME_THRESHOLD, optionnel pour MA_CROSSOVER.
+    // La validation conditionnelle est gérée dans AlertService.createAlert().
     private BigDecimal thresholdValue;
 
     @NotNull(message = "Le champ recurring est obligatoire")
     private Boolean recurring;
+
+    // Période courte de la MA (ex: 8). Obligatoire pour MA_CROSSOVER.
+    private Integer shortPeriod;
+
+    // Période longue de la MA (ex: 30, 50). Obligatoire pour MA_CROSSOVER.
+    private Integer longPeriod;
+
+    // Type de moyenne mobile : "SMA" ou "EMA". Obligatoire pour MA_CROSSOVER.
+    private String maType;
 }

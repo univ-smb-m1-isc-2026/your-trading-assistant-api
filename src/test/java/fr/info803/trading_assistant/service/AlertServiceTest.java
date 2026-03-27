@@ -375,6 +375,123 @@ class AlertServiceTest {
 
             verify(alertRepository, never()).save(any());
         }
+
+        @Test
+        @DisplayName("should throw IllegalArgumentException when PRICE_THRESHOLD missing thresholdValue")
+        void shouldThrowWhenPriceThresholdMissingThreshold() {
+            // Arrange
+            CreateAlertRequest request = new CreateAlertRequest();
+            request.setSymbol("BTC");
+            request.setType("PRICE_THRESHOLD");
+            request.setDirection("ABOVE");
+            // NO threshold value
+            request.setRecurring(true);
+
+            when(accountRepository.findByEmail(EMAIL)).thenReturn(Optional.of(account));
+            when(assetRepository.findBySymbol("BTC")).thenReturn(Optional.of(btcAsset));
+
+            // Act & Assert
+            assertThatThrownBy(() -> alertService.createAlert(EMAIL, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("thresholdValue is required");
+                
+            verify(alertRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should create MA_CROSSOVER alert successfully without thresholdValue")
+        void shouldCreateMaCrossoverAlert() {
+            // Arrange
+            CreateAlertRequest request = new CreateAlertRequest();
+            request.setSymbol("BTC");
+            request.setType("MA_CROSSOVER");
+            request.setDirection("ABOVE");
+            // NO threshold value
+            request.setShortPeriod(8);
+            request.setLongPeriod(50);
+            request.setMaType("SMA");
+            request.setRecurring(true);
+
+            when(accountRepository.findByEmail(EMAIL)).thenReturn(Optional.of(account));
+            when(assetRepository.findBySymbol("BTC")).thenReturn(Optional.of(btcAsset));
+            when(alertRepository.save(any(Alert.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            // Act
+            AlertResponse result = alertService.createAlert(EMAIL, request);
+
+            // Assert
+            assertThat(result.getType()).isEqualTo("MA_CROSSOVER");
+            assertThat(result.getShortPeriod()).isEqualTo(8);
+            assertThat(result.getLongPeriod()).isEqualTo(50);
+            assertThat(result.getMaType()).isEqualTo("SMA");
+            assertThat(result.getThresholdValue()).isNull();
+        }
+    }
+
+    // =========================================================================
+    // validateMaCrossoverFields()
+    // =========================================================================
+
+    @Nested
+    @DisplayName("validateMaCrossoverFields()")
+    class ValidateMaCrossoverFieldsTests {
+        
+        @Test
+        @DisplayName("should throw when shortPeriod or longPeriod is null")
+        void shouldThrowWhenPeriodsNull() {
+            CreateAlertRequest request = new CreateAlertRequest();
+            request.setMaType("SMA");
+            
+            // Both null
+            assertThatThrownBy(() -> alertService.validateMaCrossoverFields(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("shortPeriod and longPeriod are required");
+                
+            // Only short null
+            request.setLongPeriod(50);
+            assertThatThrownBy(() -> alertService.validateMaCrossoverFields(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("shortPeriod and longPeriod are required");
+        }
+        
+        @Test
+        @DisplayName("should throw when periods < 1")
+        void shouldThrowWhenPeriodsZeroOrNegative() {
+            CreateAlertRequest request = new CreateAlertRequest();
+            request.setShortPeriod(0);
+            request.setLongPeriod(50);
+            request.setMaType("SMA");
+            
+            assertThatThrownBy(() -> alertService.validateMaCrossoverFields(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must be >= 1");
+        }
+        
+        @Test
+        @DisplayName("should throw when shortPeriod >= longPeriod")
+        void shouldThrowWhenShortGreaterThanLong() {
+            CreateAlertRequest request = new CreateAlertRequest();
+            request.setShortPeriod(50);
+            request.setLongPeriod(20);
+            request.setMaType("SMA");
+            
+            assertThatThrownBy(() -> alertService.validateMaCrossoverFields(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("strictly less than longPeriod");
+        }
+        
+        @Test
+        @DisplayName("should throw when maType is invalid")
+        void shouldThrowWhenMaTypeInvalid() {
+            CreateAlertRequest request = new CreateAlertRequest();
+            request.setShortPeriod(8);
+            request.setLongPeriod(50);
+            request.setMaType("UNKNOWN");
+            
+            assertThatThrownBy(() -> alertService.validateMaCrossoverFields(request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid maType");
+        }
     }
 
     // =========================================================================

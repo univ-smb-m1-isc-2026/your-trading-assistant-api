@@ -20,7 +20,7 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Domain:** A trading assistant application to manage assets, strategies, and market analysis.
 - **Authentication:** Fully implemented. JWT-based stateless auth via `/auth/register` and `/auth/login`. All other endpoints require a valid Bearer token.
 - **Asset API:** Implemented. `GET /assets` returns all assets with their latest price sorted alphabetically. `GET /assets/{symbol}/candles` returns 1 year of daily OHLCV candles for a given symbol (404 if unknown).
-- **Alert API:** Implemented. Full CRUD for user-configured alerts + triggered alert history. Uses the **Strategy Pattern** (`AlertEvaluator` interface with `supports()` + `evaluate()`) for extensible alert evaluation. Current evaluators: `PriceThresholdEvaluator` (compares high/low price), `VolumeThresholdEvaluator` (compares volume). Alerts are evaluated during nightly sync (`AssetDataSyncService.syncForDate()`) within a single transactional block to prevent lazy-loading issues. Anti-duplicate protection via unique constraint `(alert_id, candle_date)`. One-shot alerts (`recurring=false`) are automatically deactivated after triggering. Emits domain events (`AlertCreatedEvent`, `AlertsTriggeredEvent`) consumed by `AlertNotificationListener` to send Webhook notifications to Discord via `DiscordNotificationService`.
+- **Alert API:** Implemented. Full CRUD for user-configured alerts + triggered alert history. Uses the **Strategy Pattern** (`AlertEvaluator` interface with `supports()` + `evaluate()`) for extensible alert evaluation. Current evaluators: `PriceThresholdEvaluator` (compares high/low price), `VolumeThresholdEvaluator` (compares volume), and `MaCrossoverEvaluator` (compares short/long SMA or EMA). Alerts are evaluated during nightly sync (`AssetDataSyncService.syncForDate()`) within a single transactional block to prevent lazy-loading issues. Anti-duplicate protection via unique constraint `(alert_id, candle_date)`. One-shot alerts (`recurring=false`) are automatically deactivated after triggering. Emits domain events (`AlertCreatedEvent`, `AlertsTriggeredEvent`) consumed by `AlertNotificationListener` to send Webhook notifications to Discord via `DiscordNotificationService`.
 
 ## Build, Lint, and Test Commands
 
@@ -149,19 +149,25 @@ curl -s -X POST http://localhost:8080/alerts \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"symbol":"BTC","type":"PRICE_THRESHOLD","direction":"ABOVE","thresholdValue":100000,"recurring":true}'
 
-# 7. List configured alerts
+# 7. Create a Moving Average Crossover alert (Golden Cross MA_CROSSOVER on BTC, SMA 8 vs 50)
+curl -s -X POST http://localhost:8080/alerts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"symbol":"BTC","type":"MA_CROSSOVER","direction":"ABOVE","shortPeriod":8,"longPeriod":50,"maType":"SMA","recurring":true}'
+
+# 8. List configured alerts
 curl -s http://localhost:8080/alerts -H "Authorization: Bearer $TOKEN"
 
-# 8. Update an alert (partial update — only change threshold)
+# 9. Update an alert (partial update — only change threshold)
 curl -s -X PUT http://localhost:8080/alerts/1 \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"thresholdValue":105000}'
 
-# 9. View triggered alert history
+# 10. View triggered alert history
 curl -s http://localhost:8080/alerts/triggered -H "Authorization: Bearer $TOKEN"
 
-# 10. Delete an alert (and its triggered history)
+# 11. Delete an alert (and its triggered history)
 curl -s -X DELETE http://localhost:8080/alerts/1 -H "Authorization: Bearer $TOKEN"
 ```
 

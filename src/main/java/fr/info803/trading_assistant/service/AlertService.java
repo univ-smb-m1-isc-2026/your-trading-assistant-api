@@ -88,6 +88,9 @@ public class AlertService {
             .type(alert.getType().name())
             .direction(alert.getDirection().name())
             .thresholdValue(alert.getThresholdValue())
+            .shortPeriod(alert.getShortPeriod())
+            .longPeriod(alert.getLongPeriod())
+            .maType(alert.getMaType())
             .recurring(alert.isRecurring())
             .active(alert.isActive())
             .createdAt(alert.getCreatedAt())
@@ -171,12 +174,25 @@ public class AlertService {
         AlertType type = parseAlertType(request.getType());
         AlertDirection direction = parseAlertDirection(request.getDirection());
 
+        // Validation conditionnelle selon le type d'alerte
+        if (type == AlertType.MA_CROSSOVER) {
+            validateMaCrossoverFields(request);
+        } else {
+            if (request.getThresholdValue() == null) {
+                throw new IllegalArgumentException(
+                    "thresholdValue is required for alert type " + type);
+            }
+        }
+
         Alert alert = Alert.builder()
             .account(account)
             .asset(asset)
             .type(type)
             .direction(direction)
             .thresholdValue(request.getThresholdValue())
+            .shortPeriod(request.getShortPeriod())
+            .longPeriod(request.getLongPeriod())
+            .maType(request.getMaType())
             .recurring(request.getRecurring())
             .active(true)
             .createdAt(LocalDateTime.now())
@@ -223,6 +239,15 @@ public class AlertService {
         }
         if (request.getActive() != null) {
             alert.setActive(request.getActive());
+        }
+        if (request.getShortPeriod() != null) {
+            alert.setShortPeriod(request.getShortPeriod());
+        }
+        if (request.getLongPeriod() != null) {
+            alert.setLongPeriod(request.getLongPeriod());
+        }
+        if (request.getMaType() != null) {
+            alert.setMaType(request.getMaType());
         }
 
         alert = alertRepository.save(alert);
@@ -404,5 +429,45 @@ public class AlertService {
             throw new IllegalArgumentException("Invalid alert direction: " + direction
                 + ". Valid values: " + java.util.Arrays.toString(AlertDirection.values()));
         }
+    }
+
+    /*
+        Valide les champs spécifiques aux alertes MA_CROSSOVER.
+
+        Règles :
+        - shortPeriod et longPeriod sont obligatoires.
+        - Les deux périodes doivent être >= 1.
+        - shortPeriod doit être strictement inférieur à longPeriod
+          (sinon le croisement n'a aucun sens financier).
+        - maType est obligatoire et doit être "SMA" ou "EMA".
+    */
+    // package-private for testability via Mockito.spy()
+    void validateMaCrossoverFields(CreateAlertRequest request) {
+        if (request.getShortPeriod() == null || request.getLongPeriod() == null) {
+            throw new IllegalArgumentException(
+                "shortPeriod and longPeriod are required for MA_CROSSOVER alerts");
+        }
+        if (request.getShortPeriod() < 1 || request.getLongPeriod() < 1) {
+            throw new IllegalArgumentException(
+                "shortPeriod and longPeriod must be >= 1");
+        }
+        if (request.getShortPeriod() >= request.getLongPeriod()) {
+            throw new IllegalArgumentException(
+                "shortPeriod (" + request.getShortPeriod()
+                + ") must be strictly less than longPeriod ("
+                + request.getLongPeriod() + ")");
+        }
+        if (request.getMaType() == null || request.getMaType().isBlank()) {
+            throw new IllegalArgumentException(
+                "maType is required for MA_CROSSOVER alerts. Valid values: SMA, EMA");
+        }
+        String normalizedMaType = request.getMaType().toUpperCase();
+        if (!"SMA".equals(normalizedMaType) && !"EMA".equals(normalizedMaType)) {
+            throw new IllegalArgumentException(
+                "Invalid maType: '" + request.getMaType()
+                + "'. Valid values: SMA, EMA");
+        }
+        // Normalise le maType pour cohérence en base
+        request.setMaType(normalizedMaType);
     }
 }

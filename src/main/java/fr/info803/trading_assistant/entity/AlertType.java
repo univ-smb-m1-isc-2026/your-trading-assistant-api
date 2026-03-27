@@ -22,5 +22,12 @@ public enum AlertType {
     PRICE_THRESHOLD,
 
     // Alerte sur seuil de volume journalier : compare le volume de la bougie au seuil.
-    VOLUME_THRESHOLD
+    VOLUME_THRESHOLD,
+
+    // Alerte sur croisement de moyennes mobiles (MA Crossover).
+    // Détecte quand une MA courte (shortPeriod) croise une MA longue (longPeriod).
+    // Supporte SMA et EMA (choisi par l'utilisateur via le champ maType).
+    // Direction ABOVE = Golden Cross (courte passe au-dessus de la longue).
+    // Direction BELOW = Death Cross (courte passe en-dessous de la longue).
+    MA_CROSSOVER
 }

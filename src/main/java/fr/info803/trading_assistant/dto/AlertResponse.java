@@ -28,4 +28,8 @@ public class AlertResponse {
     private boolean recurring;
     private boolean active;
     private LocalDateTime createdAt;
+    // Champs spécifiques à MA_CROSSOVER (null pour les autres types)
+    private Integer shortPeriod;
+    private Integer longPeriod;
+    private String maType;
 }

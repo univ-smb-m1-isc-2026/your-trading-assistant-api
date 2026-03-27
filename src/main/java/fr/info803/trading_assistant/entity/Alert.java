@@ -98,8 +98,24 @@ public class Alert {
     private AlertDirection direction;
 
     // Seuil configuré par l'utilisateur (prix ou volume selon le type).
-    @Column(nullable = false, precision = 30, scale = 10)
+    // Obligatoire pour PRICE_THRESHOLD et VOLUME_THRESHOLD, null pour MA_CROSSOVER.
+    @Column(precision = 30, scale = 10)
     private BigDecimal thresholdValue;
+
+    // Période courte de la moyenne mobile (ex: 8 jours).
+    // Utilisé uniquement pour MA_CROSSOVER, null pour les autres types.
+    @Column(name = "short_period")
+    private Integer shortPeriod;
+
+    // Période longue de la moyenne mobile (ex: 30 ou 50 jours).
+    // Utilisé uniquement pour MA_CROSSOVER, null pour les autres types.
+    @Column(name = "long_period")
+    private Integer longPeriod;
+
+    // Type de moyenne mobile : "SMA" ou "EMA".
+    // Utilisé uniquement pour MA_CROSSOVER, null pour les autres types.
+    @Column(name = "ma_type", length = 3)
+    private String maType;
 
     // true = reste active après déclenchement ; false = one-shot (désactivation auto).
     @Column(nullable = false)

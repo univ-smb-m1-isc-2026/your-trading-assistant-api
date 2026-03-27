@@ -29,4 +29,7 @@ public class UpdateAlertRequest {
     private BigDecimal thresholdValue;
     private Boolean recurring;
     private Boolean active;
+    private Integer shortPeriod;
+    private Integer longPeriod;
+    private String maType;
 }

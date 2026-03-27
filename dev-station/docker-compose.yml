@@ -27,6 +27,7 @@ services:
       - SPRING_DATASOURCE_USERNAME=root
       - SPRING_DATASOURCE_PASSWORD=root
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
       - JWT_SECRET=${JWT_SECRET:-dev-station-secret-key-at-least-256-bits-long}
     volumes:
       - ./logs:/logs

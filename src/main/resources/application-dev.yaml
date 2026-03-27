@@ -8,3 +8,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
+
+# Configuration Discord
+discord:
+  webhook-url: ${DISCORD_WEBHOOK_URL}

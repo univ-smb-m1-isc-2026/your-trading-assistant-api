@@ -10,9 +10,9 @@ This document provides instructions and guidelines for agentic coding agents wor
 ## Project Overview
 - **Stack:** Java 21, Spring Boot 4.0.2, Maven. Jackson 3.x (group ID `tools.jackson`, NOT `com.fasterxml.jackson`).
 - **Architecture:** Standard Layered Architecture.
-  - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`, `DevDataInitializer`).
+  - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`, `DevDataInitializer`, `DiscordProperties`).
   - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`, `FavoriteController`, `AlertController`).
-  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `AssetDataProvider` (interface with date-range signature), `HyperliquidAssetDataProvider`, `FavoriteService`, `AlertService`, `AlertEvaluator` (Strategy interface), `PriceThresholdEvaluator`, `VolumeThresholdEvaluator`).
+  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `AssetDataProvider`, `HyperliquidAssetDataProvider`, `FavoriteService`, `AlertService`, `AlertEvaluator`, `PriceThresholdEvaluator`, `VolumeThresholdEvaluator`, `DiscordNotificationService`, `AlertNotificationListener`).
   - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository`, `AccountFavoriteAssetRepository`, `AlertRepository`, `TriggeredAlertRepository` — all extend `JpaRepository`).
   - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`, `AccountFavoriteAsset`, `Alert`, `TriggeredAlert`, `AlertType` enum, `AlertDirection` enum).
   - `dto`: Data Transfer Objects (`RegisterRequest`, `LoginRequest`, `AuthResponse`, `AssetSummaryResponse`, `CandleResponse`, `CreateAlertRequest`, `UpdateAlertRequest`, `AlertResponse`, `TriggeredAlertResponse`).
@@ -20,7 +20,7 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Domain:** A trading assistant application to manage assets, strategies, and market analysis.
 - **Authentication:** Fully implemented. JWT-based stateless auth via `/auth/register` and `/auth/login`. All other endpoints require a valid Bearer token.
 - **Asset API:** Implemented. `GET /assets` returns all assets with their latest price sorted alphabetically. `GET /assets/{symbol}/candles` returns 1 year of daily OHLCV candles for a given symbol (404 if unknown).
-- **Alert API:** Implemented. Full CRUD for user-configured alerts + triggered alert history. Uses the **Strategy Pattern** (`AlertEvaluator` interface with `supports()` + `evaluate()`) for extensible alert evaluation. Current evaluators: `PriceThresholdEvaluator` (compares high/low price), `VolumeThresholdEvaluator` (compares volume). Alerts are evaluated during nightly sync (`AssetDataSyncService.syncForDate()`), NOT during bulk historical loads (`syncForDateRange()`). Anti-duplicate protection via unique constraint `(alert_id, candle_date)`. One-shot alerts (`recurring=false`) are automatically deactivated after triggering.
+- **Alert API:** Implemented. Full CRUD for user-configured alerts + triggered alert history. Uses the **Strategy Pattern** (`AlertEvaluator` interface with `supports()` + `evaluate()`) for extensible alert evaluation. Current evaluators: `PriceThresholdEvaluator` (compares high/low price), `VolumeThresholdEvaluator` (compares volume). Alerts are evaluated during nightly sync (`AssetDataSyncService.syncForDate()`) within a single transactional block to prevent lazy-loading issues. Anti-duplicate protection via unique constraint `(alert_id, candle_date)`. One-shot alerts (`recurring=false`) are automatically deactivated after triggering. Emits domain events (`AlertCreatedEvent`, `AlertsTriggeredEvent`) consumed by `AlertNotificationListener` to send Webhook notifications to Discord via `DiscordNotificationService`.
 
 ## Build, Lint, and Test Commands
 

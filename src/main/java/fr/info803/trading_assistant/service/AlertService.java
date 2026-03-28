@@ -114,6 +114,7 @@ public class AlertService {
             .triggeredValue(triggered.getTriggeredValue())
             .candleDate(triggered.getCandleDate())
             .triggeredAt(triggered.getTriggeredAt())
+            .alert(toAlertResponse(alert))
             .build();
     }
 

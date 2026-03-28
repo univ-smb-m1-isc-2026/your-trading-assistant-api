@@ -152,6 +152,11 @@ class AlertControllerTest {
                     .triggeredValue(new BigDecimal("101500"))
                     .candleDate(LocalDate.of(2026, 2, 27))
                     .triggeredAt(LocalDateTime.of(2026, 2, 28, 0, 5, 30))
+                    .alert(AlertResponse.builder()
+                        .id(3L)
+                        .symbol("BTC")
+                        .type("PRICE_THRESHOLD")
+                        .build())
                     .build()
             );
             when(alertService.getTriggeredAlerts("test@example.com")).thenReturn(triggered);
@@ -166,7 +171,11 @@ class AlertControllerTest {
                 .andExpect(jsonPath("$[0].symbol").value("BTC"))
                 .andExpect(jsonPath("$[0].triggeredValue").isNumber())
                 .andExpect(jsonPath("$[0].candleDate").exists())
-                .andExpect(jsonPath("$[0].triggeredAt").exists());
+                .andExpect(jsonPath("$[0].triggeredAt").exists())
+                .andExpect(jsonPath("$[0].alert").exists())
+                .andExpect(jsonPath("$[0].alert.id").value(3))
+                .andExpect(jsonPath("$[0].alert.symbol").value("BTC"))
+                .andExpect(jsonPath("$[0].alert.type").value("PRICE_THRESHOLD"));
         }
 
         @Test

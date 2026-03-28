@@ -242,6 +242,10 @@ class AlertServiceTest {
             assertThat(result.get(0).getThresholdValue()).isEqualByComparingTo(new BigDecimal("100000"));
             assertThat(result.get(0).getTriggeredValue()).isEqualByComparingTo(new BigDecimal("101500"));
             assertThat(result.get(0).getCandleDate()).isEqualTo(TEST_DATE);
+            assertThat(result.get(0).getAlert()).isNotNull();
+            assertThat(result.get(0).getAlert().getId()).isEqualTo(1L);
+            assertThat(result.get(0).getAlert().getSymbol()).isEqualTo("BTC");
+            assertThat(result.get(0).getAlert().getType()).isEqualTo("PRICE_THRESHOLD");
         }
 
         @Test

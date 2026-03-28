@@ -33,4 +33,5 @@ public class TriggeredAlertResponse {
     private BigDecimal triggeredValue;
     private LocalDate candleDate;
     private LocalDateTime triggeredAt;
+    private AlertResponse alert;
 }

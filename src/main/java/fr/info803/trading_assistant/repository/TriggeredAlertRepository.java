@@ -43,4 +43,6 @@ public interface TriggeredAlertRepository extends JpaRepository<TriggeredAlert, 
     boolean existsByAlertAndCandleDate(Alert alert, LocalDate candleDate);
 
     void deleteByAlert(Alert alert);
+
+    void deleteByAlertIn(List<Alert> alerts);
 }

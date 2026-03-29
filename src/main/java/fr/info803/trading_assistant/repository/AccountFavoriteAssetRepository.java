@@ -43,4 +43,6 @@ public interface AccountFavoriteAssetRepository extends JpaRepository<AccountFav
     boolean existsByAccountAndAsset(Account account, Asset asset);
 
     void deleteByAccountAndAsset(Account account, Asset asset);
+
+    void deleteByAccount(Account account);
 }

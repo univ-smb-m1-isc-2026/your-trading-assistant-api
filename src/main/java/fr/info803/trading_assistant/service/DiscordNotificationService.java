@@ -20,14 +20,26 @@ public class DiscordNotificationService {
     private final WebClient.Builder webClientBuilder;
 
     /**
-     * Envoie un message à Discord.
+     * Envoie un message à Discord sur le webhook global.
      */
     public void sendMessage(DiscordMessage message) {
-        log.info("Sending notification to Discord");
+        sendMessage(message, discordProperties.getWebhookUrl());
+    }
+
+    /**
+     * Envoie un message à Discord sur un webhook spécifique.
+     */
+    public void sendMessage(DiscordMessage message, String webhookUrl) {
+        if (webhookUrl == null || webhookUrl.isBlank()) {
+            log.debug("No webhook URL provided, skipping notification");
+            return;
+        }
+
+        log.info("Sending notification to Discord webhook: {}", webhookUrl.replaceAll("(.{20}).*", "$1..."));
         
         webClientBuilder.build()
             .post()
-            .uri(discordProperties.getWebhookUrl())
+            .uri(webhookUrl)
             .bodyValue(message)
             .retrieve()
             .toBodilessEntity()

@@ -67,6 +67,10 @@ public class Account implements UserDetails {
     @Column(nullable = false)
     private Role role;
 
+    // Webhook Discord spécifique à l'utilisateur (optionnel)
+    @Column(name = "discord_webhook", nullable = true)
+    private String discordWebhook;
+
     // --- Implémentation de UserDetails ---
 
     /*

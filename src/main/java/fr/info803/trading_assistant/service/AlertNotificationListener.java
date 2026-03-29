@@ -56,9 +56,18 @@ public class AlertNotificationListener {
             .footer(fr.info803.trading_assistant.dto.discord.DiscordFooter.builder().text("Utilisateur : " + event.accountEmail()).build())
             .build();
 
-        discordNotificationService.sendMessage(DiscordMessage.builder()
+        DiscordMessage message = DiscordMessage.builder()
             .embeds(List.of(embed))
-            .build());
+            .build();
+            
+        // Envoi global
+        discordNotificationService.sendMessage(message);
+        
+        // Envoi privé si webhook configuré
+        Account account = alert.getAccount();
+        if (account != null && account.getDiscordWebhook() != null && !account.getDiscordWebhook().isBlank()) {
+            discordNotificationService.sendMessage(message, account.getDiscordWebhook());
+        }
     }
 
     /**
@@ -91,9 +100,17 @@ public class AlertNotificationListener {
                 .footer(fr.info803.trading_assistant.dto.discord.DiscordFooter.builder().text("Compte : " + account.getEmail()).build())
                 .build();
 
-            discordNotificationService.sendMessage(DiscordMessage.builder()
+            DiscordMessage message = DiscordMessage.builder()
                 .embeds(List.of(embed))
-                .build());
+                .build();
+                
+            // Envoi global
+            discordNotificationService.sendMessage(message);
+            
+            // Envoi privé si webhook configuré
+            if (account != null && account.getDiscordWebhook() != null && !account.getDiscordWebhook().isBlank()) {
+                discordNotificationService.sendMessage(message, account.getDiscordWebhook());
+            }
         });
     }
 

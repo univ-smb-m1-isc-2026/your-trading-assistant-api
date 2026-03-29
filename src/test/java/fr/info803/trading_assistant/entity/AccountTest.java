@@ -71,7 +71,8 @@ class AccountTest {
                     "Jean",
                     "jean@example.com",
                     "password123",
-                    Role.ROLE_ADMIN
+                    Role.ROLE_ADMIN,
+                    "webhook"
             );
 
             // Assert
@@ -80,6 +81,7 @@ class AccountTest {
             assertThat(account.getUsername()).isEqualTo("jean@example.com");
             assertThat(account.getPassword()).isEqualTo("password123");
             assertThat(account.getRole()).isEqualTo(Role.ROLE_ADMIN);
+            assertThat(account.getDiscordWebhook()).isEqualTo("webhook");
         }
 
         @Test
@@ -94,6 +96,7 @@ class AccountTest {
             account.setEmail("marie@example.com");
             account.setPassword("hash123");
             account.setRole(Role.ROLE_ADMIN);
+            account.setDiscordWebhook("webhook");
 
             // Assert
             assertThat(account.getId()).isEqualTo(5L);
@@ -101,6 +104,7 @@ class AccountTest {
             assertThat(account.getUsername()).isEqualTo("marie@example.com");
             assertThat(account.getPassword()).isEqualTo("hash123");
             assertThat(account.getRole()).isEqualTo(Role.ROLE_ADMIN);
+            assertThat(account.getDiscordWebhook()).isEqualTo("webhook");
         }
     }
 

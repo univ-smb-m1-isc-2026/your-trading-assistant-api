@@ -58,6 +58,15 @@ class AccountServiceTest {
     @Mock
     private AuthenticationManager authenticationManager;
 
+    @Mock
+    private fr.info803.trading_assistant.repository.AlertRepository alertRepository;
+
+    @Mock
+    private fr.info803.trading_assistant.repository.TriggeredAlertRepository triggeredAlertRepository;
+
+    @Mock
+    private fr.info803.trading_assistant.repository.AccountFavoriteAssetRepository accountFavoriteAssetRepository;
+
     @InjectMocks
     private AccountService accountService;
 
@@ -303,6 +312,162 @@ class AccountServiceTest {
 
             // Verify JWT was NOT generated
             verify(jwtService, never()).generateToken(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Profile Method")
+    class GetProfileTests {
+
+        @Test
+        @DisplayName("should return profile response mapped from account")
+        void shouldReturnProfileResponse() {
+            // Arrange
+            Account account = Account.builder()
+                    .email("user@example.com")
+                    .username("User Name")
+                    .discordWebhook("http://webhook.url")
+                    .role(Role.ROLE_USER)
+                    .build();
+
+            // Act
+            fr.info803.trading_assistant.dto.ProfileResponse response = accountService.getProfile(account);
+
+            // Assert
+            assertThat(response).isNotNull();
+            assertThat(response.email()).isEqualTo("user@example.com");
+            assertThat(response.username()).isEqualTo("User Name");
+            assertThat(response.discordWebhook()).isEqualTo("http://webhook.url");
+            assertThat(response.role()).isEqualTo(Role.ROLE_USER);
+        }
+    }
+
+    @Nested
+    @DisplayName("Update Profile Method")
+    class UpdateProfileTests {
+
+        @Test
+        @DisplayName("should update all fields and generate new token if email and username changed")
+        void shouldUpdateAllFieldsAndGenerateNewToken() {
+            // Arrange
+            Account account = Account.builder()
+                    .email("old@example.com")
+                    .username("Old Name")
+                    .password("old_encoded_password")
+                    .discordWebhook("http://old.url")
+                    .build();
+
+            fr.info803.trading_assistant.dto.UpdateProfileRequest request = new fr.info803.trading_assistant.dto.UpdateProfileRequest(
+                    "New Name", "new@example.com", "old_password", "newPassword", "http://new.url"
+            );
+
+            when(accountRepository.existsByEmail("new@example.com")).thenReturn(false);
+            when(passwordEncoder.matches("old_password", "old_encoded_password")).thenReturn(true);
+            when(passwordEncoder.encode("newPassword")).thenReturn("new_encoded_password");
+            when(jwtService.generateToken(account)).thenReturn("new_jwt_token");
+
+            // Act
+            fr.info803.trading_assistant.dto.UpdateProfileResponse response = accountService.updateProfile(account, request);
+
+            // Assert
+            assertThat(account.getEmail()).isEqualTo("new@example.com");
+            assertThat(account.getDisplayUsername()).isEqualTo("New Name");
+            assertThat(account.getPassword()).isEqualTo("new_encoded_password");
+            assertThat(account.getDiscordWebhook()).isEqualTo("http://new.url");
+
+            verify(accountRepository).save(account);
+            verify(jwtService).generateToken(account);
+
+            assertThat(response.profile().email()).isEqualTo("new@example.com");
+            assertThat(response.token()).isEqualTo("new_jwt_token");
+        }
+
+        @Test
+        @DisplayName("should throw exception if email is already taken")
+        void shouldThrowExceptionIfEmailTaken() {
+            // Arrange
+            Account account = Account.builder()
+                    .email("old@example.com")
+                    .build();
+
+            fr.info803.trading_assistant.dto.UpdateProfileRequest request = new fr.info803.trading_assistant.dto.UpdateProfileRequest(
+                    null, "taken@example.com", null, null, null
+            );
+
+            when(accountRepository.existsByEmail("taken@example.com")).thenReturn(true);
+
+            // Act & Assert
+            assertThatThrownBy(() -> accountService.updateProfile(account, request))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("Cet email est déjà utilisé.");
+
+            verify(accountRepository, never()).save(any());
+        }
+
+        @Test
+        @DisplayName("should not generate new token if email and username remain unchanged")
+        void shouldNotGenerateNewTokenIfEmailAndUsernameUnchanged() {
+            // Arrange
+            Account account = Account.builder()
+                    .email("old@example.com")
+                    .username("Old Name")
+                    .build();
+
+            fr.info803.trading_assistant.dto.UpdateProfileRequest request = new fr.info803.trading_assistant.dto.UpdateProfileRequest(
+                    "Old Name", "old@example.com", null, null, "http://new.url"
+            );
+
+            // Act
+            fr.info803.trading_assistant.dto.UpdateProfileResponse response = accountService.updateProfile(account, request);
+
+            // Assert
+            verify(accountRepository).save(account);
+            verify(jwtService, never()).generateToken(any());
+            assertThat(response.token()).isNull();
+            assertThat(account.getDiscordWebhook()).isEqualTo("http://new.url");
+        }
+    }
+
+    @Nested
+    @DisplayName("Delete Profile Method")
+    class DeleteProfileTests {
+
+        @Test
+        @DisplayName("should delete account and its dependencies")
+        void shouldDeleteAccountAndDependencies() {
+            // Arrange
+            Account account = Account.builder().id(1L).email("user@example.com").build();
+            fr.info803.trading_assistant.entity.Alert alert = fr.info803.trading_assistant.entity.Alert.builder().id(10L).account(account).build();
+            java.util.List<fr.info803.trading_assistant.entity.Alert> alerts = java.util.List.of(alert);
+
+            when(alertRepository.findByAccount(account)).thenReturn(alerts);
+
+            // Act
+            accountService.deleteProfile(account);
+
+            // Assert
+            verify(triggeredAlertRepository).deleteByAlertIn(alerts);
+            verify(alertRepository).deleteByAccount(account);
+            verify(accountFavoriteAssetRepository).deleteByAccount(account);
+            verify(accountRepository).delete(account);
+        }
+
+        @Test
+        @DisplayName("should delete account and its favorites even if no alerts")
+        void shouldDeleteAccountAndFavoritesEvenIfNoAlerts() {
+            // Arrange
+            Account account = Account.builder().id(1L).email("user@example.com").build();
+
+            when(alertRepository.findByAccount(account)).thenReturn(java.util.Collections.emptyList());
+
+            // Act
+            accountService.deleteProfile(account);
+
+            // Assert
+            verify(triggeredAlertRepository, never()).deleteByAlertIn(any());
+            verify(alertRepository, never()).deleteByAccount(any());
+            verify(accountFavoriteAssetRepository).deleteByAccount(account);
+            verify(accountRepository).delete(account);
         }
     }
 }

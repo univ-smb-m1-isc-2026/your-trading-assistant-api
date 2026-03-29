@@ -37,4 +37,6 @@ public interface AlertRepository extends JpaRepository<Alert, Long> {
     Optional<Alert> findByIdAndAccount(Long id, Account account);
 
     List<Alert> findByActiveTrue();
+
+    void deleteByAccount(Account account);
 }

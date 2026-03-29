@@ -68,6 +68,7 @@ public class AssetDataSyncService {
     private final AssetRepository assetRepository;
     private final AssetDailyValueRepository assetDailyValueRepository;
     private final AlertService alertService;
+    private final ChartPatternService chartPatternService;
 
     // Map<sourceName, provider> construite depuis la liste injectée par Spring.
     // Clé = AssetDataProvider.getSourceName() = AssetSource.name en DB.
@@ -88,12 +89,14 @@ public class AssetDataSyncService {
         AssetRepository assetRepository,
         AssetDailyValueRepository assetDailyValueRepository,
         AlertService alertService,
+        ChartPatternService chartPatternService,
         List<AssetDataProvider> providers
     ) {
         this.assetSourceRepository = assetSourceRepository;
         this.assetRepository = assetRepository;
         this.assetDailyValueRepository = assetDailyValueRepository;
         this.alertService = alertService;
+        this.chartPatternService = chartPatternService;
         // Convertit la liste en Map pour un lookup O(1)
         this.providersByName = providers.stream()
             .collect(Collectors.toMap(AssetDataProvider::getSourceName, Function.identity()));
@@ -188,6 +191,9 @@ public class AssetDataSyncService {
         // Si le sync a échoué pour certains assets, les alertes correspondantes seront
         // simplement ignorées (pas de bougie → pas d'évaluation, voir AlertService.evaluateSingleAlert).
         alertService.evaluateAlerts(targetDate);
+        
+        // Evalue les figures chartistes
+        chartPatternService.evaluatePatterns(targetDate);
     }
 
     /*

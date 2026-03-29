@@ -11,16 +11,17 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Stack:** Java 21, Spring Boot 4.0.2, Maven. Jackson 3.x (group ID `tools.jackson`, NOT `com.fasterxml.jackson`).
 - **Architecture:** Standard Layered Architecture.
   - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`, `DevDataInitializer`, `DiscordProperties`).
-  - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`, `FavoriteController`, `AlertController`).
-  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `AssetDataProvider`, `HyperliquidAssetDataProvider`, `FavoriteService`, `AlertService`, `AlertEvaluator`, `PriceThresholdEvaluator`, `VolumeThresholdEvaluator`, `DiscordNotificationService`, `AlertNotificationListener`).
-  - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository`, `AccountFavoriteAssetRepository`, `AlertRepository`, `TriggeredAlertRepository` — all extend `JpaRepository`).
-  - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`, `AccountFavoriteAsset`, `Alert`, `TriggeredAlert`, `AlertType` enum, `AlertDirection` enum).
-  - `dto`: Data Transfer Objects (`RegisterRequest`, `LoginRequest`, `AuthResponse`, `AssetSummaryResponse`, `CandleResponse`, `CreateAlertRequest`, `UpdateAlertRequest`, `AlertResponse`, `TriggeredAlertResponse`).
+  - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`, `FavoriteController`, `AlertController`, `ChartPatternController`, `GlobalChartPatternController`).
+  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `AssetDataProvider`, `HyperliquidAssetDataProvider`, `FavoriteService`, `AlertService`, `AlertEvaluator`, `PriceThresholdEvaluator`, `VolumeThresholdEvaluator`, `DiscordNotificationService`, `AlertNotificationListener`, `ChartPatternService`).
+  - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository`, `AccountFavoriteAssetRepository`, `AlertRepository`, `TriggeredAlertRepository`, `ChartPatternRepository`, `ChartPatternRepositoryCustomImpl`).
+  - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`, `AccountFavoriteAsset`, `Alert`, `TriggeredAlert`, `AlertType` enum, `AlertDirection` enum, `ChartPattern`, `ChartPatternType` enum, `ChartPatternCategory` enum).
+  - `dto`: Data Transfer Objects (`RegisterRequest`, `LoginRequest`, `AuthResponse`, `AssetSummaryResponse`, `CandleResponse`, `CreateAlertRequest`, `UpdateAlertRequest`, `AlertResponse`, `TriggeredAlertResponse`, `ChartPatternResponse`).
   - `exception`: Custom exceptions and global handler (`AssetNotFoundException`, `FavoriteAlreadyExistsException`, `FavoriteNotFoundException`, `AlertNotFoundException`, `GlobalExceptionHandler` with inner `record ErrorResponse` and `record AlertErrorResponse`).
 - **Domain:** A trading assistant application to manage assets, strategies, and market analysis.
 - **Authentication:** Fully implemented. JWT-based stateless auth via `/auth/register` and `/auth/login`. All other endpoints require a valid Bearer token.
 - **Asset API:** Implemented. `GET /assets` returns all assets with their latest price sorted alphabetically. `GET /assets/{symbol}/candles` returns 1 year of daily OHLCV candles for a given symbol (404 if unknown).
-- **Alert API:** Implemented. Full CRUD for user-configured alerts + triggered alert history. Uses the **Strategy Pattern** (`AlertEvaluator` interface with `supports()` + `evaluate()`) for extensible alert evaluation. Current evaluators: `PriceThresholdEvaluator` (compares high/low price), `VolumeThresholdEvaluator` (compares volume), and `MaCrossoverEvaluator` (compares short/long SMA or EMA). Alerts are evaluated during nightly sync (`AssetDataSyncService.syncForDate()`) within a single transactional block to prevent lazy-loading issues. Anti-duplicate protection via unique constraint `(alert_id, candle_date)`. One-shot alerts (`recurring=false`) are automatically deactivated after triggering. Emits domain events (`AlertCreatedEvent`, `AlertsTriggeredEvent`) consumed by `AlertNotificationListener` to send Webhook notifications to Discord via `DiscordNotificationService`.
+- **Alert API:** Implemented. Full CRUD for user-configured alerts + triggered alert history (including the full `Alert` configuration object in responses). Uses the **Strategy Pattern** (`AlertEvaluator` interface with `supports()` + `evaluate()`) for extensible alert evaluation. Current evaluators: `PriceThresholdEvaluator` (compares high/low price), `VolumeThresholdEvaluator` (compares volume), and `MaCrossoverEvaluator` (compares short/long SMA or EMA). Alerts are evaluated during nightly sync (`AssetDataSyncService.syncForDate()`) within a single transactional block to prevent lazy-loading issues. Anti-duplicate protection via unique constraint `(alert_id, candle_date)`. One-shot alerts (`recurring=false`) are automatically deactivated after triggering. Emits domain events (`AlertCreatedEvent`, `AlertsTriggeredEvent`) consumed by `AlertNotificationListener` to send Webhook notifications to Discord via `DiscordNotificationService`.
+- **Chart Pattern API:** Implemented. `GET /assets/{symbol}/patterns` returns all historically detected patterns for an asset. `GET /assets/{symbol}/patterns/today` returns only patterns detected for the latest available date. `GET /patterns` returns a paginated list of all patterns across all assets with optional filtering by `symbol`, `type`, and `category`. `GET /patterns/stats` returns the total count for each pattern type, supporting `symbol` and `category` filters. Patterns are evaluated and persisted by `ChartPatternService` during the nightly sync (`AssetDataSyncService.syncForDate()`).
 
 ## Build, Lint, and Test Commands
 
@@ -38,7 +39,7 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Generate coverage report:** `./mvnw clean test jacoco:report`
   - Report generated at `target/site/jacoco/index.html`
   - *Note:* JaCoCo 0.8.12 emits `IllegalClassFormatException` warnings when run on Java 24 (class file major version 68). This is noise only — tests still pass and the report is generated correctly. See **Known Issues** below.
-- **Current test count:** 203 tests, all passing.
+- **Current test count:** 227 tests, all passing.
 
 ### Linting and Quality
 - **Check for dependency updates:** `./mvnw versions:display-plugin-updates`
@@ -169,6 +170,15 @@ curl -s http://localhost:8080/alerts/triggered -H "Authorization: Bearer $TOKEN"
 
 # 11. Delete an alert (and its triggered history)
 curl -s -X DELETE http://localhost:8080/alerts/1 -H "Authorization: Bearer $TOKEN"
+
+# 12. List all patterns across all assets (paginated)
+curl -s http://localhost:8080/patterns -H "Authorization: Bearer $TOKEN"
+
+# 13. Filter patterns by symbol and category
+curl -s "http://localhost:8080/patterns?symbol=BTC&category=BULLISH" -H "Authorization: Bearer $TOKEN"
+
+# 14. Get global pattern statistics
+curl -s http://localhost:8080/patterns/stats -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Common Tasks for Agents

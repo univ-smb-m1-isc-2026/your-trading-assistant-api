@@ -13,6 +13,7 @@ import fr.info803.trading_assistant.entity.AssetSource;
 import fr.info803.trading_assistant.repository.AssetRepository;
 import fr.info803.trading_assistant.repository.AssetSourceRepository;
 import fr.info803.trading_assistant.service.AssetDataSyncService;
+import fr.info803.trading_assistant.service.ChartPatternService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -47,6 +48,7 @@ public class ProdDataInitializer implements ApplicationRunner {
     private final AssetSourceRepository assetSourceRepository;
     private final AssetRepository assetRepository;
     private final AssetDataSyncService assetDataSyncService;
+    private final ChartPatternService chartPatternService;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -87,6 +89,15 @@ public class ProdDataInitializer implements ApplicationRunner {
                 startDate, endDate);
 
         assetDataSyncService.syncForDateRange(startDate, endDate);
+
+        // Step 4 — Evaluate chart patterns for the synced historical data
+        log.info("[ProdDataInitializer] Evaluating chart patterns for the past year [{} → {}]...",
+                startDate, endDate);
+        LocalDate currentDate = startDate;
+        while (!currentDate.isAfter(endDate)) {
+            chartPatternService.evaluatePatterns(currentDate);
+            currentDate = currentDate.plusDays(1);
+        }
 
         log.info("[ProdDataInitializer] Production-grade initialization complete.");
     }

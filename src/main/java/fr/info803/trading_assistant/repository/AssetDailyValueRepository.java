@@ -57,5 +57,7 @@ public interface AssetDailyValueRepository extends JpaRepository<AssetDailyValue
     List<AssetDailyValue> findLatestForAllAssets();
 
     List<AssetDailyValue> findByAssetAndDateGreaterThanEqualOrderByDateAsc(Asset asset, LocalDate fromDate);
+
+    List<AssetDailyValue> findTop11ByAssetAndDateLessThanEqualOrderByDateDesc(Asset asset, LocalDate date);
 }
 

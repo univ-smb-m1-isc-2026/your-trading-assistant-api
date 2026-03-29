@@ -65,6 +65,7 @@ class AssetDataSyncServiceTest {
     private AssetDailyValueRepository assetDailyValueRepository;
     private AssetDataProvider hyperliquidProvider;
     private AlertService alertService;
+    private ChartPatternService chartPatternService;
 
     // service under test
     private AssetDataSyncService service;
@@ -82,6 +83,7 @@ class AssetDataSyncServiceTest {
         assetDailyValueRepository = mock(AssetDailyValueRepository.class);
         hyperliquidProvider = mock(AssetDataProvider.class);
         alertService = mock(AlertService.class);
+        chartPatternService = mock(ChartPatternService.class);
 
         // Provider reports its name so the service can match it to the DB source
         when(hyperliquidProvider.getSourceName()).thenReturn("hyperliquid");
@@ -91,6 +93,7 @@ class AssetDataSyncServiceTest {
             assetRepository,
             assetDailyValueRepository,
             alertService,
+            chartPatternService,
             List.of(hyperliquidProvider)
         );
 

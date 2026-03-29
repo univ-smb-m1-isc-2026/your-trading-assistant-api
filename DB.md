@@ -12,6 +12,7 @@ erDiagram
     ASSET ||--o{ ASSET_DAILY_VALUE : "has history"
     ASSET ||--o{ ALERT : "monitored by"
     ASSET ||--o{ ACCOUNT_FAVORITE_ASSET : "is favorited"
+    ASSET ||--o{ CHART_PATTERN : "exhibits"
     ALERT ||--o{ TRIGGERED_ALERT : "generates"
 
     APP_ACCOUNT {
@@ -58,6 +59,13 @@ erDiagram
         numeric triggered_value
         date candle_date
         timestamp triggered_at
+    }
+    CHART_PATTERN {
+        bigint id PK
+        bigint asset_id FK
+        date date
+        string type
+        string category
     }
     ACCOUNT_FAVORITE_ASSET {
         bigint id PK
@@ -117,3 +125,11 @@ erDiagram
 - `asset_id` (FK) : L'actif mis en favori.
 - `favorited_at` : Horodatage de l'ajout en favori.
 - **Contrainte :** Un utilisateur ne peut mettre un actif en favori qu'une seule fois (`UK(account_id, asset_id)`).
+
+### `chart_pattern`
+- `id` (PK) : Identifiant unique (Séquence `chart_pattern_sequence`).
+- `asset_id` (FK) : Référence vers l'actif.
+- `date` : Date à laquelle la figure a été détectée.
+- `type` : Le nom de la figure chartiste (ex: `BULLISH_ENGULFING`, `DOJI`).
+- `category` : La catégorie de la figure (`BULLISH`, `BEARISH`, `NEUTRAL`).
+- **Contrainte :** Une même figure ne peut être détectée qu'une seule fois pour un actif à une date donnée (`UK(asset_id, date, type)`).

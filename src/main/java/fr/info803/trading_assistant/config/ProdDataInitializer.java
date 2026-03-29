@@ -38,13 +38,25 @@ public class ProdDataInitializer implements ApplicationRunner {
     private static final String SOURCE_NAME = "hyperliquid";
     private static final String SOURCE_URL = "https://api.hyperliquid.xyz/info";
 
-    private static final List<String> SYMBOLS = List.of(
+    private static final String YAHOO_SOURCE_NAME = "yahoo";
+    private static final String YAHOO_SOURCE_URL  = "https://query1.finance.yahoo.com/v7/finance/quote";
+
+    private static final List<String> CRYPTO_SYMBOLS = List.of(
             "BTC", "ETH", "ATOM", "DYDX", "SOL", "AVAX", "BNB", "APE", "OP", "LTC",
             "ARB", "DOGE", "INJ", "SUI", "kPEPE", "CRV", "LDO", "LINK", "STX", "CFX",
             "GMX", "SNX", "XRP", "BCH", "APT", "AAVE", "COMP", "WLD", "YGG", "TRX",
             "kSHIB", "UNI", "SEI", "RUNE", "ZRO", "DOT", "BANANA", "TRB", "FTT", "ARK",
             "BIGTIME", "KAS", "BLUR", "TIA", "BSV", "ADA", "TON", "MINA", "POLYX", "GAS"
     );
+
+    private static final List<String> STOCK_SYMBOLS = List.of(
+            "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "BRK-B", "UNH", "JNJ",
+            "JPM", "V", "PG", "XOM", "MA", "HD", "CVX", "ABBV", "LLY", "PFE",
+            "MRK", "COST", "PEP", "KO", "TMO", "AVGO", "ORCL", "AZN", "CSCO", "ACN",
+            "NKE", "DHR", "MCD", "LIN", "ABT", "DIS", "ADBE", "PM", "WMT", "CRM",
+            "TXN", "UPS", "NEE", "MS", "VZ", "RTX", "HON", "AMGN", "COP", "CAT"
+    );
+
     private final AssetSourceRepository assetSourceRepository;
     private final AssetRepository assetRepository;
     private final AssetDataSyncService assetDataSyncService;
@@ -60,28 +72,28 @@ public class ProdDataInitializer implements ApplicationRunner {
 
         log.info("[ProdDataInitializer] Initializing production-grade data...");
 
-        // Step 1 — Create the Hyperliquid AssetSource
-        AssetSource source = assetSourceRepository.save(
+        // Step 1 — Create AssetSources
+        AssetSource hlSource = assetSourceRepository.save(
                 AssetSource.builder()
                         .name(SOURCE_NAME)
                         .url(SOURCE_URL)
                         .build()
         );
-        log.info("[ProdDataInitializer] Created AssetSource: id={} name={}", source.getId(), source.getName());
+        log.info("[ProdDataInitializer] Created AssetSource: {}", hlSource.getName());
 
-        // Step 2 — Create the base assets
-        List<Asset> assets = SYMBOLS.stream()
-                .map(symbol -> Asset.builder()
-                .symbol(symbol)
-                .source(source)
-                .build())
-                .toList();
+        AssetSource yahooSource = assetSourceRepository.save(
+                AssetSource.builder()
+                        .name(YAHOO_SOURCE_NAME)
+                        .url(YAHOO_SOURCE_URL)
+                        .build()
+        );
+        log.info("[ProdDataInitializer] Created AssetSource: {}", yahooSource.getName());
 
-        assetRepository.saveAll(assets);
-        log.info("[ProdDataInitializer] Created {} base assets: {}", assets.size(), SYMBOLS);
+        // Step 2 — Create assets
+        seedAssets(hlSource, CRYPTO_SYMBOLS);
+        seedAssets(yahooSource, STOCK_SYMBOLS);
 
         // Step 3 — Synchronize 1 year of historical OHLCV data
-        // We sync up to yesterday to ensure we only get completed daily candles.
         LocalDate endDate = LocalDate.now().minusDays(1);
         LocalDate startDate = LocalDate.now().minusDays(365);
 
@@ -100,5 +112,16 @@ public class ProdDataInitializer implements ApplicationRunner {
         }
 
         log.info("[ProdDataInitializer] Production-grade initialization complete.");
+    }
+
+    private void seedAssets(AssetSource source, List<String> symbols) {
+        List<Asset> assets = symbols.stream()
+                .map(symbol -> Asset.builder()
+                        .symbol(symbol)
+                        .source(source)
+                        .build())
+                .toList();
+        assetRepository.saveAll(assets);
+        log.info("[ProdDataInitializer] Created {} assets for source {}", assets.size(), source.getName());
     }
 }

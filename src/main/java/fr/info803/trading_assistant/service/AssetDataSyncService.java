@@ -158,6 +158,11 @@ public class AssetDataSyncService {
 
                 for (Asset asset : assets) {
                     try {
+                        // Anti-rate limit for Yahoo
+                        if (source.getName().equals("yahoo")) {
+                            Thread.sleep(500);
+                        }
+
                         // Wrapper : startDate == endDate == targetDate → une seule bougie
                         List<DailyValueDto> values = provider.fetchDailyValues(
                             asset.getSymbol(), targetDate, targetDate, source.getUrl()
@@ -241,6 +246,11 @@ public class AssetDataSyncService {
 
             for (Asset asset : assets) {
                 try {
+                    // Anti-rate limit for Yahoo
+                    if (source.getName().equals("yahoo")) {
+                        Thread.sleep(500);
+                    }
+
                     List<DailyValueDto> values = provider.fetchDailyValues(
                         asset.getSymbol(), startDate, endDate, source.getUrl()
                     );

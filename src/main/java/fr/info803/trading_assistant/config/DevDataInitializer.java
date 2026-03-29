@@ -60,7 +60,18 @@ public class DevDataInitializer implements ApplicationRunner {
     private static final String SOURCE_NAME = "hyperliquid";
     private static final String SOURCE_URL  = "https://api.hyperliquid.xyz/info";
 
-    private static final List<String> SYMBOLS = List.of("BTC", "ETH", "AERO", "SAGA", "MANTA");
+    private static final String YAHOO_SOURCE_NAME = "yahoo";
+    private static final String YAHOO_SOURCE_URL  = "https://query1.finance.yahoo.com/v7/finance/quote";
+
+    private static final List<String> CRYPTO_SYMBOLS = List.of("BTC", "ETH", "AERO", "SAGA", "MANTA");
+
+    private static final List<String> STOCK_SYMBOLS = List.of(
+        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META", "BRK-B", "UNH", "JNJ",
+        "JPM", "V", "PG", "XOM", "MA", "HD", "CVX", "ABBV", "LLY", "PFE",
+        "MRK", "COST", "PEP", "KO", "TMO", "AVGO", "ORCL", "AZN", "CSCO", "ACN",
+        "NKE", "DHR", "MCD", "LIN", "ABT", "DIS", "ADBE", "PM", "WMT", "CRM",
+        "TXN", "UPS", "NEE", "MS", "VZ", "RTX", "HON", "AMGN", "COP", "CAT"
+    );
 
     private final AssetSourceRepository assetSourceRepository;
     private final AssetRepository assetRepository;
@@ -76,11 +87,11 @@ public class DevDataInitializer implements ApplicationRunner {
 
         Flux :
           1. Garde idempotente — si les données existent déjà, on ne fait rien.
-          2. Création de l'AssetSource "hyperliquid".
-          3. Création des 5 assets liés à cette source.
-          4. Appel de syncForDateRange() → fetch HTTP réel vers Hyperliquid,
-             upsert des valeurs OHLCV pour 1 an dans AssetDailyValue.
-          5. Création du compte demo avec alertes et historique de déclenchements.
+          2. Création de l'AssetSource "hyperliquid" et "yahoo".
+          3. Création des actifs liés à chaque source.
+          4. Appel de syncForDateRange() → fetch réel (Hyperliquid + Yahoo),
+             upsert des valeurs OHLCV pour 1 an.
+          5. Création du compte demo avec alertes et historique.
     */
     @Override
     public void run(ApplicationArguments args) {
@@ -91,43 +102,49 @@ public class DevDataInitializer implements ApplicationRunner {
 
         log.info("[DevDataInitializer] Initializing dev data...");
 
-        // Étape 1 — Création de la source Hyperliquid
-        // On sauvegarde d'abord la source pour obtenir l'id généré par la séquence JPA,
-        // nécessaire pour la foreign key dans Asset.
-        AssetSource source = assetSourceRepository.save(
+        // Étape 1 — Création des sources
+        AssetSource hlSource = assetSourceRepository.save(
             AssetSource.builder()
                 .name(SOURCE_NAME)
                 .url(SOURCE_URL)
                 .build()
         );
-        log.info("[DevDataInitializer] Created AssetSource: id={} name={}", source.getId(), source.getName());
+        log.info("[DevDataInitializer] Created AssetSource: {}", hlSource.getName());
 
-        // Étape 2 — Création des assets
-        // Stream + map pour éviter la répétition, toList() retourne une liste immuable.
-        List<Asset> assets = SYMBOLS.stream()
-            .map(symbol -> Asset.builder()
-                .symbol(symbol)
-                .source(source)
-                .build())
-            .toList();
+        AssetSource yahooSource = assetSourceRepository.save(
+            AssetSource.builder()
+                .name(YAHOO_SOURCE_NAME)
+                .url(YAHOO_SOURCE_URL)
+                .build()
+        );
+        log.info("[DevDataInitializer] Created AssetSource: {}", yahooSource.getName());
 
-        assetRepository.saveAll(assets);
-        log.info("[DevDataInitializer] Created {} assets: {}", assets.size(), SYMBOLS);
+        // Étape 2 — Création des actifs
+        seedAssets(hlSource, CRYPTO_SYMBOLS);
+        seedAssets(yahooSource, STOCK_SYMBOLS);
 
         // Étape 3 — Synchronisation de 1 an d'historique en bulk
-        // syncForDateRange() appelle l'API une seule fois par asset avec un intervalle
-        // de 365 jours, au lieu de boucler jour par jour (365 appels × N assets → N appels).
-        // L'API Hyperliquid supporte nativement les intervalles via startTime/endTime.
         LocalDate endDate = LocalDate.now().minusDays(1);
         LocalDate startDate = LocalDate.now().minusDays(365);
         log.info("[DevDataInitializer] Triggering bulk sync for 1 year of history [{} → {}]...",
             startDate, endDate);
         assetDataSyncService.syncForDateRange(startDate, endDate);
 
-        // Étape 4 — Injection du compte demo avec alertes et historique
+        // Étape 4 — Injection du compte demo
         seedDemoUser();
 
         log.info("[DevDataInitializer] Dev initialization complete.");
+    }
+
+    private void seedAssets(AssetSource source, List<String> symbols) {
+        List<Asset> assets = symbols.stream()
+            .map(symbol -> Asset.builder()
+                .symbol(symbol)
+                .source(source)
+                .build())
+            .toList();
+        assetRepository.saveAll(assets);
+        log.info("[DevDataInitializer] Created {} assets for source {}", assets.size(), source.getName());
     }
 
     /*

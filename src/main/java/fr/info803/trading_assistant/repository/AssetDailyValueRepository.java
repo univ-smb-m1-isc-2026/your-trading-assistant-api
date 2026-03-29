@@ -7,6 +7,8 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import org.springframework.data.repository.query.Param;
+
 import fr.info803.trading_assistant.entity.Asset;
 import fr.info803.trading_assistant.entity.AssetDailyValue;
 
@@ -44,6 +46,10 @@ import fr.info803.trading_assistant.entity.AssetDailyValue;
            SELECT * FROM asset_daily_value
            WHERE asset_id = ? AND date >= ?
            ORDER BY date ASC
+
+    4. findMaxDateBySymbol(String symbol)
+       - Récupère la date la plus récente enregistrée pour un symbole donné (ex: BTC).
+       - Utilisé pour la synchronisation de rattrapage au démarrage de l'application.
 */
 public interface AssetDailyValueRepository extends JpaRepository<AssetDailyValue, Long> {
 
@@ -59,5 +65,8 @@ public interface AssetDailyValueRepository extends JpaRepository<AssetDailyValue
     List<AssetDailyValue> findByAssetAndDateGreaterThanEqualOrderByDateAsc(Asset asset, LocalDate fromDate);
 
     List<AssetDailyValue> findTop11ByAssetAndDateLessThanEqualOrderByDateDesc(Asset asset, LocalDate date);
+
+    @Query("SELECT MAX(adv.date) FROM AssetDailyValue adv WHERE adv.asset.symbol = :symbol")
+    Optional<LocalDate> findMaxDateBySymbol(@Param("symbol") String symbol);
 }
 

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 import fr.info803.trading_assistant.entity.Asset;
 import fr.info803.trading_assistant.entity.AssetSource;
+import fr.info803.trading_assistant.repository.AssetDailyValueRepository;
 import fr.info803.trading_assistant.repository.AssetRepository;
 import fr.info803.trading_assistant.repository.AssetSourceRepository;
 import fr.info803.trading_assistant.service.AssetDataSyncService;
@@ -21,13 +22,15 @@ import lombok.extern.slf4j.Slf4j;
  * Data initializer for the production profile.
  *
  * This component runs once at startup after the Spring context is fully
- * initialized. It checks if the database is empty by looking for the
- * "hyperliquid" asset source. If not present, it seeds the database with the
- * core asset source, base assets (BTC, ETH, etc.), and triggers a bulk
- * synchronization of one year of historical market data.
+ * initialized. It ensures the infrastructure (sources, assets) is set up and
+ * synchronizes missing market data.
  *
- * Unlike DevDataInitializer, this class does NOT seed demo users or triggered
- * alerts.
+ * Strategy:
+ * 1. Ensure "hyperliquid" and "yahoo" sources exist.
+ * 2. Ensure all crypto and stock symbols are registered as Assets.
+ * 3. Check the database for the latest available date for BTC.
+ * 4. If no data exists, sync the last 365 days (initial seed).
+ * 5. If data exists but is older than yesterday, sync the missing range (catch-up).
  */
 @Slf4j
 @Component
@@ -59,52 +62,54 @@ public class ProdDataInitializer implements ApplicationRunner {
 
     private final AssetSourceRepository assetSourceRepository;
     private final AssetRepository assetRepository;
+    private final AssetDailyValueRepository assetDailyValueRepository;
     private final AssetDataSyncService assetDataSyncService;
     private final ChartPatternService chartPatternService;
 
     @Override
     public void run(ApplicationArguments args) {
-        // Idempotency check: if the source already exists, we assume initialization was already done.
-        if (assetSourceRepository.findByName(SOURCE_NAME).isPresent()) {
-            log.info("[ProdDataInitializer] Data already present, skipping initialization.");
+        log.info("[ProdDataInitializer] Checking production data state...");
+
+        // Step 1 — Idempotent infrastructure setup (Sources)
+        AssetSource hlSource = assetSourceRepository.findByName(SOURCE_NAME)
+                .orElseGet(() -> assetSourceRepository.save(
+                        AssetSource.builder().name(SOURCE_NAME).url(SOURCE_URL).build()
+                ));
+
+        AssetSource yahooSource = assetSourceRepository.findByName(YAHOO_SOURCE_NAME)
+                .orElseGet(() -> assetSourceRepository.save(
+                        AssetSource.builder().name(YAHOO_SOURCE_NAME).url(YAHOO_SOURCE_URL).build()
+                ));
+
+        // Step 2 — Idempotent asset seeding
+        seedAssetsIfMissing(hlSource, CRYPTO_SYMBOLS);
+        seedAssetsIfMissing(yahooSource, STOCK_SYMBOLS);
+
+        // Step 3 — Determine synchronization range
+        // We use BTC as the reference to know if the app needs to catch up
+        LocalDate latestBtcDate = assetDailyValueRepository.findMaxDateBySymbol("BTC").orElse(null);
+        LocalDate endDate = LocalDate.now().minusDays(1);
+        LocalDate startDate;
+
+        if (latestBtcDate == null) {
+            // Case: Fresh database -> Sync 1 year of history
+            startDate = LocalDate.now().minusDays(365);
+            log.info("[ProdDataInitializer] No data found. Performing initial 1-year sync [{} → {}].", startDate, endDate);
+        } else if (latestBtcDate.isBefore(endDate)) {
+            // Case: Application was down -> Sync missing days
+            startDate = latestBtcDate.plusDays(1);
+            log.info("[ProdDataInitializer] Catching up: last BTC date was {}. Syncing [{} → {}].", latestBtcDate, startDate, endDate);
+        } else {
+            // Case: Up to date
+            log.info("[ProdDataInitializer] Data is up to date (last sync: {}). skipping sync.", latestBtcDate);
             return;
         }
 
-        log.info("[ProdDataInitializer] Initializing production-grade data...");
-
-        // Step 1 — Create AssetSources
-        AssetSource hlSource = assetSourceRepository.save(
-                AssetSource.builder()
-                        .name(SOURCE_NAME)
-                        .url(SOURCE_URL)
-                        .build()
-        );
-        log.info("[ProdDataInitializer] Created AssetSource: {}", hlSource.getName());
-
-        AssetSource yahooSource = assetSourceRepository.save(
-                AssetSource.builder()
-                        .name(YAHOO_SOURCE_NAME)
-                        .url(YAHOO_SOURCE_URL)
-                        .build()
-        );
-        log.info("[ProdDataInitializer] Created AssetSource: {}", yahooSource.getName());
-
-        // Step 2 — Create assets
-        seedAssets(hlSource, CRYPTO_SYMBOLS);
-        seedAssets(yahooSource, STOCK_SYMBOLS);
-
-        // Step 3 — Synchronize 1 year of historical OHLCV data
-        LocalDate endDate = LocalDate.now().minusDays(1);
-        LocalDate startDate = LocalDate.now().minusDays(365);
-
-        log.info("[ProdDataInitializer] Triggering bulk sync for 1 year of history [{} → {}]...",
-                startDate, endDate);
-
+        // Step 4 — Synchronize data for the calculated range
         assetDataSyncService.syncForDateRange(startDate, endDate);
 
-        // Step 4 — Evaluate chart patterns for the synced historical data
-        log.info("[ProdDataInitializer] Evaluating chart patterns for the past year [{} → {}]...",
-                startDate, endDate);
+        // Step 5 — Evaluate chart patterns for the newly synced data
+        log.info("[ProdDataInitializer] Evaluating chart patterns for the synced range [{} → {}]...", startDate, endDate);
         LocalDate currentDate = startDate;
         while (!currentDate.isAfter(endDate)) {
             chartPatternService.evaluatePatterns(currentDate);
@@ -114,14 +119,15 @@ public class ProdDataInitializer implements ApplicationRunner {
         log.info("[ProdDataInitializer] Production-grade initialization complete.");
     }
 
-    private void seedAssets(AssetSource source, List<String> symbols) {
-        List<Asset> assets = symbols.stream()
-                .map(symbol -> Asset.builder()
+    private void seedAssetsIfMissing(AssetSource source, List<String> symbols) {
+        for (String symbol : symbols) {
+            if (assetRepository.findBySymbol(symbol).isEmpty()) {
+                assetRepository.save(Asset.builder()
                         .symbol(symbol)
                         .source(source)
-                        .build())
-                .toList();
-        assetRepository.saveAll(assets);
-        log.info("[ProdDataInitializer] Created {} assets for source {}", assets.size(), source.getName());
+                        .build());
+                log.debug("[ProdDataInitializer] Seeded missing asset: {}", symbol);
+            }
+        }
     }
 }

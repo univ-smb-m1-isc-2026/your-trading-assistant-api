@@ -111,7 +111,7 @@ public class AssetDataSyncService {
         Séparé de syncForDate() pour permettre l'appel depuis d'autres composants
         (DevDataInitializer, futurs endpoints admin) avec n'importe quelle date.
     */
-    @Scheduled(cron = "0 */2 * * * *")
+    @Scheduled(cron = "0 1 1 * * *")
     public void syncDailyPrices() {
         // J-1 car à minuit, la journée qui vient de se terminer est celle qu'on veut stocker.
         syncForDate(LocalDate.now().minusDays(1));

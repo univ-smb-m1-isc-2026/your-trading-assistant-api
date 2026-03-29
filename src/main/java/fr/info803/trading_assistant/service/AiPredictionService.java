@@ -75,14 +75,4 @@ public class AiPredictionService {
                 .block();
     }
 
-    /*
-        Récupère un exemple d'input récent (dernier jour du test set, actif aléatoire).
-    */
-    public Map<String, Object> getLatestSample() {
-        return webClient.get()
-                .uri("/latest-sample")
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .block();
-    }
 }

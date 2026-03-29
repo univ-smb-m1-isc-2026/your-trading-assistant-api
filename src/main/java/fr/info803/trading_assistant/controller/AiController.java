@@ -50,8 +50,4 @@ public class AiController {
         return ResponseEntity.ok(aiPredictionService.getTestReport());
     }
 
-    @GetMapping("/latest-sample")
-    public ResponseEntity<Map<String, Object>> latestSample() {
-        return ResponseEntity.ok(aiPredictionService.getLatestSample());
-    }
 }

@@ -63,4 +63,15 @@ public class AiPredictionService {
                 .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
                 .block();
     }
+
+    /*
+        Récupère le rapport de test du modèle (test.log parsé par le service IA).
+    */
+    public Map<String, Object> getTestReport() {
+        return webClient.get()
+                .uri("/test-report")
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+                .block();
+    }
 }

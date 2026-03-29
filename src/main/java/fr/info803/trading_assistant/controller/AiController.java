@@ -44,4 +44,9 @@ public class AiController {
     public ResponseEntity<Map<String, Object>> predict(@RequestBody Map<String, Double> features) {
         return ResponseEntity.ok(aiPredictionService.predict(features));
     }
+
+    @GetMapping("/test-report")
+    public ResponseEntity<Map<String, Object>> testReport() {
+        return ResponseEntity.ok(aiPredictionService.getTestReport());
+    }
 }

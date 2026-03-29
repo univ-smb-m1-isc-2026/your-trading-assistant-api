@@ -6,6 +6,7 @@ import java.util.Map;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,7 +32,7 @@ public class GlobalChartPatternController {
             @RequestParam(required = false) String symbol,
             @RequestParam(required = false) ChartPatternType type,
             @RequestParam(required = false) ChartPatternCategory category,
-            @PageableDefault(size = 50) Pageable pageable) {
+            @PageableDefault(size = 50, sort = "date", direction = Sort.Direction.DESC) Pageable pageable) {
         return ResponseEntity.ok(chartPatternService.getAllPatterns(symbol, type, category, pageable));
     }
 

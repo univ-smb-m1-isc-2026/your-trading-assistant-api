@@ -29,6 +29,8 @@ import fr.info803.trading_assistant.exception.GlobalExceptionHandler;
 import fr.info803.trading_assistant.repository.AssetPredictionRepository;
 import fr.info803.trading_assistant.service.AssetPredictionService;
 import fr.info803.trading_assistant.dto.PredictionStatsDto;
+import fr.info803.trading_assistant.dto.AssetBacktestResultDto;
+import fr.info803.trading_assistant.dto.GlobalBacktestStatsDto;
 import java.math.BigDecimal;
 
 @ExtendWith(MockitoExtension.class)
@@ -137,6 +139,56 @@ class PredictionControllerTest {
                     .andExpect(jsonPath("$.mean").value(0.05))
                     .andExpect(jsonPath("$.median").value(0.01))
                     .andExpect(jsonPath("$.count").value(100));
+        }
+    }
+    @Nested
+    class BacktestTests {
+
+        @Test
+        void shouldReturnAssetBacktestResults() throws Exception {
+            // Arrange
+            AssetBacktestResultDto dto = new AssetBacktestResultDto("BTC", 100L, BigDecimal.valueOf(65.0), BigDecimal.valueOf(75.0), BigDecimal.valueOf(1.5));
+            when(assetPredictionService.getAssetBacktestResults(null, null)).thenReturn(List.of(dto));
+
+            // Act & Assert
+            mockMvc.perform(get("/predictions/backtest/assets"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].symbol").value("BTC"))
+                    .andExpect(jsonPath("$[0].totalPredictions").value(100))
+                    .andExpect(jsonPath("$[0].successRatePct").value(65.0))
+                    .andExpect(jsonPath("$[0].maxPotentialSuccessRatePct").value(75.0))
+                    .andExpect(jsonPath("$[0].meanAbsoluteErrorPct").value(1.5));
+        }
+
+        @Test
+        void shouldReturnAssetBacktestResult() throws Exception {
+            // Arrange
+            AssetBacktestResultDto dto = new AssetBacktestResultDto("BTC", 50L, BigDecimal.valueOf(70.0), BigDecimal.valueOf(80.0), BigDecimal.valueOf(1.2));
+            when(assetPredictionService.getAssetBacktestResult("BTC", null, null)).thenReturn(dto);
+
+            // Act & Assert
+            mockMvc.perform(get("/predictions/backtest/assets/BTC"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.symbol").value("BTC"))
+                    .andExpect(jsonPath("$.totalPredictions").value(50))
+                    .andExpect(jsonPath("$.successRatePct").value(70.0))
+                    .andExpect(jsonPath("$.maxPotentialSuccessRatePct").value(80.0))
+                    .andExpect(jsonPath("$.meanAbsoluteErrorPct").value(1.2));
+        }
+
+        @Test
+        void shouldReturnGlobalBacktestStats() throws Exception {
+            // Arrange
+            GlobalBacktestStatsDto dto = new GlobalBacktestStatsDto(500L, BigDecimal.valueOf(60.5), BigDecimal.valueOf(70.5), BigDecimal.valueOf(2.0));
+            when(assetPredictionService.getGlobalBacktestStats(null, null)).thenReturn(dto);
+
+            // Act & Assert
+            mockMvc.perform(get("/predictions/backtest/stats"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalPredictions").value(500))
+                    .andExpect(jsonPath("$.successRatePct").value(60.5))
+                    .andExpect(jsonPath("$.maxPotentialSuccessRatePct").value(70.5))
+                    .andExpect(jsonPath("$.meanAbsoluteErrorPct").value(2.0));
         }
     }
 }

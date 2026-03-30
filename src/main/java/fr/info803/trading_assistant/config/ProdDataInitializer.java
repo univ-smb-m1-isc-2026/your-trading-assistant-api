@@ -115,6 +115,7 @@ public class ProdDataInitializer implements ApplicationRunner {
         LocalDate currentDate = startDate;
         while (!currentDate.isAfter(endDate)) {
             chartPatternService.evaluatePatterns(currentDate);
+            assetPredictionService.evaluatePendingPredictions(currentDate);
             assetPredictionService.generatePredictionsForDate(currentDate);
             currentDate = currentDate.plusDays(1);
         }

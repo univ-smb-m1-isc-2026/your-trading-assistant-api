@@ -204,7 +204,10 @@ public class AssetDataSyncService {
         // Evalue les figures chartistes
         chartPatternService.evaluatePatterns(targetDate);
         
-        // Evalue les prédictions d'IA
+        // Evalue le backtest des prédictions d'hier avec les données d'aujourd'hui
+        assetPredictionService.evaluatePendingPredictions(targetDate);
+
+        // Evalue les prédictions d'IA pour demain
         assetPredictionService.generatePredictionsForDate(targetDate);
     }
 

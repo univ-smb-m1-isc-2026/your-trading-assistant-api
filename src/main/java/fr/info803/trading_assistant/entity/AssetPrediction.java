@@ -58,4 +58,19 @@ public class AssetPrediction {
 
     @Column(name = "predicted_variation_pct", nullable = false, precision = 19, scale = 4)
     private BigDecimal predictedVariation;
+
+    @Column(name = "actual_variation_pct", precision = 19, scale = 4)
+    private BigDecimal actualVariation;
+
+    @Column(name = "max_potential_variation_pct", precision = 19, scale = 4)
+    private BigDecimal maxPotentialVariation;
+
+    @Column(name = "is_success")
+    private Boolean isSuccess;
+
+    @Column(name = "is_max_potential_success")
+    private Boolean isMaxPotentialSuccess;
+
+    @Column(name = "absolute_error", precision = 19, scale = 4)
+    private BigDecimal absoluteError;
 }

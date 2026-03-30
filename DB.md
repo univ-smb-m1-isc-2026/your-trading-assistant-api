@@ -78,7 +78,12 @@ erDiagram
         bigint id PK
         bigint asset_id FK
         date date
-        numeric predicted_variation
+        numeric predicted_variation_pct
+        numeric actual_variation_pct
+        numeric max_potential_variation
+        boolean is_success
+        boolean is_max_potential_success
+        numeric absolute_error
     }
 ```
 
@@ -145,5 +150,10 @@ erDiagram
 - `id` (PK) : Identifiant unique (Séquence `asset_prediction_sequence`).
 - `asset_id` (FK) : Référence vers l'actif concerné.
 - `date` : Date ciblée par la prédiction.
-- `predicted_variation` : La variation de prix estimée par l'intelligence artificielle (en pourcentage).
+- `predicted_variation_pct` : La variation de prix estimée par l'intelligence artificielle (en pourcentage).
+- `actual_variation_pct` : La variation de prix stricte constatée (Close-to-Close, en pourcentage).
+- `max_potential_variation` : La variation maximale théorique réalisable en intra-journée (utilisant High/Low, en pourcentage).
+- `is_success` : Indique si la direction de la prédiction (hausse/baisse) correspondait à la réalité stricte (Close-to-Close).
+- `is_max_potential_success` : Indique si la prédiction s'est avérée correcte à un moment donné de la journée (Max Potential).
+- `absolute_error` : L'erreur absolue entre la variation prédite et la variation stricte réelle.
 - **Contrainte :** Une seule prédiction autorisée par couple (`asset_id`, `date`) (`UK(asset_id, date)`).

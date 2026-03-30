@@ -65,6 +65,9 @@ public interface AssetDailyValueRepository extends JpaRepository<AssetDailyValue
     List<AssetDailyValue> findByAssetAndDateGreaterThanEqualOrderByDateAsc(Asset asset, LocalDate fromDate);
 
     List<AssetDailyValue> findTop11ByAssetAndDateLessThanEqualOrderByDateDesc(Asset asset, LocalDate date);
+    List<AssetDailyValue> findTop60ByAssetAndDateLessThanEqualOrderByDateDesc(Asset asset, LocalDate date);
+
+    List<AssetDailyValue> findTop200ByAssetAndDateLessThanEqualOrderByDateDesc(Asset asset, LocalDate date);
 
     @Query("SELECT MAX(adv.date) FROM AssetDailyValue adv WHERE adv.asset.symbol = :symbol")
     Optional<LocalDate> findMaxDateBySymbol(@Param("symbol") String symbol);

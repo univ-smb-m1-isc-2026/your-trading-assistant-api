@@ -15,6 +15,7 @@ import fr.info803.trading_assistant.repository.AssetRepository;
 import fr.info803.trading_assistant.repository.AssetSourceRepository;
 import fr.info803.trading_assistant.service.AssetDataSyncService;
 import fr.info803.trading_assistant.service.ChartPatternService;
+import fr.info803.trading_assistant.service.AssetPredictionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -65,6 +66,7 @@ public class ProdDataInitializer implements ApplicationRunner {
     private final AssetDailyValueRepository assetDailyValueRepository;
     private final AssetDataSyncService assetDataSyncService;
     private final ChartPatternService chartPatternService;
+    private final AssetPredictionService assetPredictionService;
 
     @Override
     public void run(ApplicationArguments args) {
@@ -109,10 +111,11 @@ public class ProdDataInitializer implements ApplicationRunner {
         assetDataSyncService.syncForDateRange(startDate, endDate);
 
         // Step 5 — Evaluate chart patterns for the newly synced data
-        log.info("[ProdDataInitializer] Evaluating chart patterns for the synced range [{} → {}]...", startDate, endDate);
+        log.info("[ProdDataInitializer] Evaluating chart patterns and AI predictions for the synced range [{} → {}]...", startDate, endDate);
         LocalDate currentDate = startDate;
         while (!currentDate.isAfter(endDate)) {
             chartPatternService.evaluatePatterns(currentDate);
+            assetPredictionService.generatePredictionsForDate(currentDate);
             currentDate = currentDate.plusDays(1);
         }
 

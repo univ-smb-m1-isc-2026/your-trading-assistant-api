@@ -24,3 +24,8 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+# Configuration AI API
+ai:
+  api:
+    url: ${AI_API_URL:http://your-trading-assistant-ai:8000}

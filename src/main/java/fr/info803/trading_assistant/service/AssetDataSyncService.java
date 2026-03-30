@@ -69,9 +69,9 @@ public class AssetDataSyncService {
     private final AssetDailyValueRepository assetDailyValueRepository;
     private final AlertService alertService;
     private final ChartPatternService chartPatternService;
+    private final AssetPredictionService assetPredictionService;
 
-    // Map<sourceName, provider> construite depuis la liste injectée par Spring.
-    // Clé = AssetDataProvider.getSourceName() = AssetSource.name en DB.
+    // Map structurée : Clé = Nom du provider (ex: "hyperliquid", "yahoo"), Valeur = Instance du provider.
     private final Map<String, AssetDataProvider> providersByName;
 
     /*
@@ -90,6 +90,7 @@ public class AssetDataSyncService {
         AssetDailyValueRepository assetDailyValueRepository,
         AlertService alertService,
         ChartPatternService chartPatternService,
+        AssetPredictionService assetPredictionService,
         List<AssetDataProvider> providers
     ) {
         this.assetSourceRepository = assetSourceRepository;
@@ -97,6 +98,7 @@ public class AssetDataSyncService {
         this.assetDailyValueRepository = assetDailyValueRepository;
         this.alertService = alertService;
         this.chartPatternService = chartPatternService;
+        this.assetPredictionService = assetPredictionService;
         // Convertit la liste en Map pour un lookup O(1)
         this.providersByName = providers.stream()
             .collect(Collectors.toMap(AssetDataProvider::getSourceName, Function.identity()));
@@ -111,6 +113,8 @@ public class AssetDataSyncService {
         Séparé de syncForDate() pour permettre l'appel depuis d'autres composants
         (DevDataInitializer, futurs endpoints admin) avec n'importe quelle date.
     */
+
+    // @Scheduled(cron = "0 */2 * * * *")
     @Scheduled(cron = "0 1 1 * * *")
     public void syncDailyPrices() {
         // J-1 car à minuit, la journée qui vient de se terminer est celle qu'on veut stocker.
@@ -199,6 +203,9 @@ public class AssetDataSyncService {
         
         // Evalue les figures chartistes
         chartPatternService.evaluatePatterns(targetDate);
+        
+        // Evalue les prédictions d'IA
+        assetPredictionService.generatePredictionsForDate(targetDate);
     }
 
     /*

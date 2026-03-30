@@ -19,3 +19,8 @@ management:
     web:
       exposure:
         include: "prometheus, health, info"
+
+# Configuration AI API
+ai:
+  api:
+    url: "http://localhost:9078"

@@ -13,6 +13,7 @@ erDiagram
     ASSET ||--o{ ALERT : "monitored by"
     ASSET ||--o{ ACCOUNT_FAVORITE_ASSET : "is favorited"
     ASSET ||--o{ CHART_PATTERN : "exhibits"
+    ASSET ||--o{ ASSET_PREDICTION : "has predictions"
     ALERT ||--o{ TRIGGERED_ALERT : "generates"
 
     APP_ACCOUNT {
@@ -72,6 +73,12 @@ erDiagram
         bigint account_id FK
         bigint asset_id FK
         timestamp favorited_at
+    }
+    ASSET_PREDICTION {
+        bigint id PK
+        bigint asset_id FK
+        date date
+        numeric predicted_variation
     }
 ```
 
@@ -133,3 +140,10 @@ erDiagram
 - `type` : Le nom de la figure chartiste (ex: `BULLISH_ENGULFING`, `DOJI`).
 - `category` : La catégorie de la figure (`BULLISH`, `BEARISH`, `NEUTRAL`).
 - **Contrainte :** Une même figure ne peut être détectée qu'une seule fois pour un actif à une date donnée (`UK(asset_id, date, type)`).
+
+### `asset_prediction`
+- `id` (PK) : Identifiant unique (Séquence `asset_prediction_sequence`).
+- `asset_id` (FK) : Référence vers l'actif concerné.
+- `date` : Date ciblée par la prédiction.
+- `predicted_variation` : La variation de prix estimée par l'intelligence artificielle (en pourcentage).
+- **Contrainte :** Une seule prédiction autorisée par couple (`asset_id`, `date`) (`UK(asset_id, date)`).

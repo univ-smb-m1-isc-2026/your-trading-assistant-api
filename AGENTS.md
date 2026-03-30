@@ -11,17 +11,19 @@ This document provides instructions and guidelines for agentic coding agents wor
 - **Stack:** Java 21, Spring Boot 4.0.2, Maven. Jackson 3.x (group ID `tools.jackson`, NOT `com.fasterxml.jackson`).
 - **Architecture:** Standard Layered Architecture.
   - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`, `DevDataInitializer`, `DiscordProperties`).
-  - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`, `FavoriteController`, `AlertController`, `ChartPatternController`, `GlobalChartPatternController`).
-  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `AssetDataProvider`, `HyperliquidAssetDataProvider`, `FavoriteService`, `AlertService`, `AlertEvaluator`, `PriceThresholdEvaluator`, `VolumeThresholdEvaluator`, `DiscordNotificationService`, `AlertNotificationListener`, `ChartPatternService`).
-  - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository`, `AccountFavoriteAssetRepository`, `AlertRepository`, `TriggeredAlertRepository`, `ChartPatternRepository`, `ChartPatternRepositoryCustomImpl`).
-  - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`, `AccountFavoriteAsset`, `Alert`, `TriggeredAlert`, `AlertType` enum, `AlertDirection` enum, `ChartPattern`, `ChartPatternType` enum, `ChartPatternCategory` enum).
-  - `dto`: Data Transfer Objects (`RegisterRequest`, `LoginRequest`, `AuthResponse`, `AssetSummaryResponse`, `CandleResponse`, `CreateAlertRequest`, `UpdateAlertRequest`, `AlertResponse`, `TriggeredAlertResponse`, `ChartPatternResponse`).
+  - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`, `FavoriteController`, `AlertController`, `ChartPatternController`, `GlobalChartPatternController`, `PredictionController`).
+  - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `AssetDataProvider`, `HyperliquidAssetDataProvider`, `FavoriteService`, `AlertService`, `AlertEvaluator`, `PriceThresholdEvaluator`, `VolumeThresholdEvaluator`, `DiscordNotificationService`, `AlertNotificationListener`, `ChartPatternService`, `AssetPredictionService`, `PredictionFeatureService`).
+  - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository`, `AccountFavoriteAssetRepository`, `AlertRepository`, `TriggeredAlertRepository`, `ChartPatternRepository`, `ChartPatternRepositoryCustomImpl`, `AssetPredictionRepository`).
+  - `entity`: JPA entities (`Account` implements `UserDetails`, `Role` enum, `Asset`, `AssetDailyValue`, `AssetSource`, `AccountFavoriteAsset`, `Alert`, `TriggeredAlert`, `AlertType` enum, `AlertDirection` enum, `ChartPattern`, `ChartPatternType` enum, `ChartPatternCategory` enum, `AssetPrediction`).
+  - `dto`: Data Transfer Objects (`RegisterRequest`, `LoginRequest`, `AuthResponse`, `AssetSummaryResponse`, `CandleResponse`, `CreateAlertRequest`, `UpdateAlertRequest`, `AlertResponse`, `TriggeredAlertResponse`, `ChartPatternResponse`, `AiPredictionResponse`, `AiHealthResponse`, `AssetPredictionResponse`, `PredictionFeaturesDto`, `PredictionStatsDto`).
+  - `client`: HTTP clients for external APIs (`AiPredictionClient`).
   - `exception`: Custom exceptions and global handler (`AssetNotFoundException`, `FavoriteAlreadyExistsException`, `FavoriteNotFoundException`, `AlertNotFoundException`, `GlobalExceptionHandler` with inner `record ErrorResponse` and `record AlertErrorResponse`).
 - **Domain:** A trading assistant application to manage assets, strategies, and market analysis.
 - **Authentication:** Fully implemented. JWT-based stateless auth via `/auth/register` and `/auth/login`. All other endpoints require a valid Bearer token.
 - **Asset API:** Implemented. `GET /assets` returns all assets with their latest price sorted alphabetically. `GET /assets/{symbol}/candles` returns 1 year of daily OHLCV candles for a given symbol (404 if unknown).
 - **Alert API:** Implemented. Full CRUD for user-configured alerts + triggered alert history (including the full `Alert` configuration object in responses). Uses the **Strategy Pattern** (`AlertEvaluator` interface with `supports()` + `evaluate()`) for extensible alert evaluation. Current evaluators: `PriceThresholdEvaluator` (compares high/low price), `VolumeThresholdEvaluator` (compares volume), and `MaCrossoverEvaluator` (compares short/long SMA or EMA). Alerts are evaluated during nightly sync (`AssetDataSyncService.syncForDate()`) within a single transactional block to prevent lazy-loading issues. Anti-duplicate protection via unique constraint `(alert_id, candle_date)`. One-shot alerts (`recurring=false`) are automatically deactivated after triggering. Emits domain events (`AlertCreatedEvent`, `AlertsTriggeredEvent`) consumed by `AlertNotificationListener` to send Webhook notifications to Discord via `DiscordNotificationService`.
 - **Chart Pattern API:** Implemented. `GET /assets/{symbol}/patterns` returns all historically detected patterns for an asset. `GET /assets/{symbol}/patterns/today` returns only patterns detected for the latest available date. `GET /patterns` returns a paginated list of all patterns across all assets with optional filtering by `symbol`, `type`, and `category`. `GET /patterns/stats` returns the total count for each pattern type, supporting `symbol` and `category` filters. Patterns are evaluated and persisted by `ChartPatternService` during the nightly sync (`AssetDataSyncService.syncForDate()`).
+- **AI Prediction API:** Implemented. `GET /predictions/health` checks the status of the external AI service. `GET /predictions/top` returns the top absolute predicted variations for a given date. `GET /predictions/{symbol}` returns the historical predictions for a specific asset. `GET /predictions/stats` returns statistical data (min, max, mean, median, count) on all historical predictions to detect outliers. Predictions are generated asynchronously during the nightly data sync (`AssetDataSyncService.syncForDate()`). For each asset, `AssetPredictionService` fetches up to 60 days of historical data, `PredictionFeatureService` calculates 23 technical features, and `AiPredictionClient` sends them to an external AI API via Spring `RestClient`. The resulting prediction is saved in the database with a unique constraint `(asset_id, date)`.
 
 ## Build, Lint, and Test Commands
 
@@ -179,6 +181,18 @@ curl -s "http://localhost:8080/patterns?symbol=BTC&category=BULLISH" -H "Authori
 
 # 14. Get global pattern statistics
 curl -s http://localhost:8080/patterns/stats -H "Authorization: Bearer $TOKEN"
+
+# 15. Check AI Prediction API health
+curl -s http://localhost:8080/predictions/health
+
+# 16. Get Top Predictions for today (requires authenticated token if secured)
+curl -s http://localhost:8080/predictions/top
+
+# 17. Get historical predictions for BTC
+curl -s http://localhost:8080/predictions/BTC
+
+# 18. Get global prediction statistics
+curl -s http://localhost:8080/predictions/stats
 ```
 
 ## Common Tasks for Agents

@@ -10,6 +10,8 @@ services:
     volumes:
       - ./postgres-init:/docker-entrypoint-initdb.d
       - ./postgres-data:/var/lib/postgresql/data
+    networks:
+      - trading_net
 
   api:
     build:
@@ -28,6 +30,22 @@ services:
       - SPRING_DATASOURCE_PASSWORD=root
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - AI_API_URL=http://your-trading-assistant-ai:8000
       - JWT_SECRET=${JWT_SECRET:-dev-station-secret-key-at-least-256-bits-long}
     volumes:
       - ./logs:/logs
+    networks:
+      - trading_net
+  your-trading-assistant-ai:
+    build:
+      context: ../../your-trading-assistant-ai
+      dockerfile: Dockerfile
+    container_name: your-trading-assistant-ai
+    restart: always
+    ports:
+      - "8000:8000"
+    networks:
+      - trading_net
+networks:
+  trading_net:
+    driver: bridge

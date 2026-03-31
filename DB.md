@@ -8,12 +8,14 @@ Ce document décrit la structure de la base de données PostgreSQL utilisée par
 erDiagram
     APP_ACCOUNT ||--o{ ALERT : "configures"
     APP_ACCOUNT ||--o{ ACCOUNT_FAVORITE_ASSET : "marks"
+    APP_ACCOUNT ||--o{ COMMUNITY_SENTIMENT : "expresses"
     ASSET_SOURCE ||--o{ ASSET : "provides"
     ASSET ||--o{ ASSET_DAILY_VALUE : "has history"
     ASSET ||--o{ ALERT : "monitored by"
     ASSET ||--o{ ACCOUNT_FAVORITE_ASSET : "is favorited"
     ASSET ||--o{ CHART_PATTERN : "exhibits"
     ASSET ||--o{ ASSET_PREDICTION : "has predictions"
+    ASSET ||--o{ COMMUNITY_SENTIMENT : "has sentiment"
     ALERT ||--o{ TRIGGERED_ALERT : "generates"
 
     APP_ACCOUNT {
@@ -73,6 +75,13 @@ erDiagram
         bigint account_id FK
         bigint asset_id FK
         timestamp favorited_at
+    }
+    COMMUNITY_SENTIMENT {
+        bigint id PK
+        bigint account_id FK
+        bigint asset_id FK
+        string type
+        timestamp updated_at
     }
     ASSET_PREDICTION {
         bigint id PK
@@ -157,3 +166,13 @@ erDiagram
 - `is_max_potential_success` : Indique si la prédiction s'est avérée correcte à un moment donné de la journée (Max Potential).
 - `absolute_error` : L'erreur absolue entre la variation prédite et la variation stricte réelle.
 - **Contrainte :** Une seule prédiction autorisée par couple (`asset_id`, `date`) (`UK(asset_id, date)`).
+
+
+### `community_sentiment`
+- `id` (PK) : Identifiant unique.
+- `account_id` (FK) : L'utilisateur qui exprime le sentiment.
+- `asset_id` (FK) : L'actif concerné.
+- `type` : Le type de sentiment (`BULLISH`, `BEARISH`).
+- `updated_at` : La date et l'heure du dernier vote ou de la dernière mise à jour.
+- **Contrainte :** Un utilisateur ne peut avoir qu'un seul sentiment actif par actif (`UK(account_id, asset_id)`).
+

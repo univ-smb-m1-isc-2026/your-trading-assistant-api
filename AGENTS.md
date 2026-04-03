@@ -11,7 +11,7 @@ This document provides instructions and guidelines for agentic coding agents wor
 ## Project Overview
 - **Stack:** Java 21, Spring Boot 4.0.2, Maven. Jackson 3.x (group ID `tools.jackson`, NOT `com.fasterxml.jackson`).
 - **Architecture:** Standard Layered Architecture.
-  - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`, `DevDataInitializer`, `DiscordProperties`).
+  - `config`: Security and infrastructure configuration (`SecurityConfig`, `ApplicationConfig`, `CorsConfig`, `JwtAuthenticationFilter`, `DiscordProperties`).
   - `controller`: Web and REST endpoints (`AuthController`, `HelloController`, `AssetController`, `FavoriteController`, `AlertController`, `ChartPatternController`, `GlobalChartPatternController`, `PredictionController`, `CommunitySentimentController`).
   - `service`: Core business logic (`AccountService`, `JwtService`, `AssetService`, `AssetDataSyncService`, `AssetDataProvider`, `HyperliquidAssetDataProvider`, `FavoriteService`, `AlertService`, `AlertEvaluator`, `PriceThresholdEvaluator`, `VolumeThresholdEvaluator`, `DiscordNotificationService`, `AlertNotificationListener`, `ChartPatternService`, `AssetPredictionService`, `PredictionFeatureService`, `CommunitySentimentService`).
   - `repository`: Data access layer (`AccountRepository`, `AssetRepository`, `AssetDailyValueRepository`, `AccountFavoriteAssetRepository`, `AlertRepository`, `TriggeredAlertRepository`, `ChartPatternRepository`, `ChartPatternRepositoryCustomImpl`, `AssetPredictionRepository`, `CommunitySentimentRepository`).
@@ -67,7 +67,7 @@ This document provides instructions and guidelines for agentic coding agents wor
 - Avoid wildcard imports (e.g., `import java.util.*;`).
 - Group imports with a single blank line between groups:
   1. Static imports
-  2. Standard Java packages (`java.*`, `javax.*`, `jakarta.*`)
+  2. Standard Java packages (`java.*`, `jakarta.*`)
   3. External libraries (`org.springframework.*`, etc.)
   4. Project classes (`fr.info803.trading_assistant.*`)
 
